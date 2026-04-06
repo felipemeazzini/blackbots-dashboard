@@ -29,7 +29,7 @@ export default function SpendAreaChart({
   dataKey2,
   label = "Valor",
   label2,
-  color = "#3B82F6",
+  color = "#F5A623",
   color2 = "#22C55E",
   formatValue = (v) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
@@ -54,17 +54,17 @@ export default function SpendAreaChart({
               </linearGradient>
             )}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2A3142" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#3A3A3A" />
           <XAxis
             dataKey="date"
-            stroke="#64748B"
+            stroke="#707070"
             fontSize={11}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
             yAxisId="left"
-            stroke="#64748B"
+            stroke="#707070"
             fontSize={11}
             tickLine={false}
             axisLine={false}
@@ -74,7 +74,7 @@ export default function SpendAreaChart({
             <YAxis
               yAxisId="right"
               orientation="right"
-              stroke="#64748B"
+              stroke="#707070"
               fontSize={11}
               tickLine={false}
               axisLine={false}
@@ -84,10 +84,10 @@ export default function SpendAreaChart({
           )}
           <Tooltip
             contentStyle={{
-              backgroundColor: "#151921",
-              border: "1px solid #2A3142",
+              backgroundColor: "#242424",
+              border: "1px solid #3A3A3A",
               borderRadius: "8px",
-              color: "#F1F5F9",
+              color: "#F5F5F5",
               fontSize: "12px",
             }}
             formatter={(value, name) => {
@@ -97,7 +97,7 @@ export default function SpendAreaChart({
                 : formatValue(Number(value));
               return [formatted, String(name)];
             }}
-            labelStyle={{ color: "#94A3B8" }}
+            labelStyle={{ color: "#B0B0B0" }}
           />
           <Area
             type="monotone"

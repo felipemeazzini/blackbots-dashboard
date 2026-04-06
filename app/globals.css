@@ -7,31 +7,29 @@
 }
 
 body {
-  color: #F1F5F9;
-  background: #0B0D0F;
+  color: #F5F5F5;
+  background: #1A1A1A;
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
 }
 
-/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0B0D0F;
+  background: #1A1A1A;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2A3142;
+  background: #3A3A3A;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3B82F6;
+  background: #F5A623;
 }
 
-/* Table styles */
 table {
   border-collapse: collapse;
 }
