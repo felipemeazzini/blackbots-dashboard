@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/auth"];
-
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  // Se DASHBOARD_PASSWORD não está configurada, acesso livre
+  // Se está configurada, exige autenticação
+  const passwordRequired = process.env.DASHBOARD_PASSWORD;
 
-  // Allow public paths
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (!passwordRequired) {
     return NextResponse.next();
   }
 
-  // Allow static assets
+  const { pathname } = request.nextUrl;
+
+  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) {
+    return NextResponse.next();
+  }
+
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -20,7 +24,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check auth cookie
   const auth = request.cookies.get("bb_auth");
   if (!auth || auth.value !== "authenticated") {
     return NextResponse.redirect(new URL("/login", request.url));
