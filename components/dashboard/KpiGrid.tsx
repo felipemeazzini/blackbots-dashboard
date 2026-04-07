@@ -1,13 +1,11 @@
 "use client";
 
 import { ProcessedMetrics, METRIC_DEFINITIONS } from "@/types/metrics";
-import { Goal } from "@/types/goals";
 import KpiCard from "./KpiCard";
 
 interface KpiGridProps {
   metrics: ProcessedMetrics;
   previousMetrics?: ProcessedMetrics;
-  goals: Goal[];
 }
 
 const DASHBOARD_METRICS = [
@@ -28,7 +26,6 @@ const DASHBOARD_METRICS = [
 export default function KpiGrid({
   metrics,
   previousMetrics,
-  goals,
 }: KpiGridProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
@@ -38,7 +35,6 @@ export default function KpiGrid({
 
         const value = metrics[key];
         const prevValue = previousMetrics?.[key];
-        const goal = goals.find((g) => g.metric_key === key);
 
         return (
           <KpiCard
@@ -46,7 +42,6 @@ export default function KpiGrid({
             definition={definition}
             value={value}
             previousValue={prevValue}
-            goal={goal}
           />
         );
       })}

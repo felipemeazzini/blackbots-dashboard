@@ -7,7 +7,6 @@ import {
   useAdSets,
 } from "@/hooks/useFacebookData";
 import { useAppContext } from "@/contexts/AppContext";
-import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
 import Header from "@/components/layout/Header";
@@ -66,7 +65,6 @@ export default function CampanhaDetailPage({
   );
   const adsets = adsetsData?.data || [];
 
-  const { goals } = useGoals(activeAccount);
 
   // Filtrar dados diarios DESTA campanha
   const campaignDailyRows = useMemo(() => {
@@ -163,7 +161,7 @@ export default function CampanhaDetailPage({
             ))}
           </div>
         ) : (
-          <KpiGrid metrics={metrics} goals={goals} />
+          <KpiGrid metrics={metrics} />
         )}
 
         {chartData.length > 0 && (

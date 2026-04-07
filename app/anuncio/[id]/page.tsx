@@ -4,7 +4,6 @@ import { useMemo, use } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccounts, useInsights, useAds } from "@/hooks/useFacebookData";
 import { useAppContext } from "@/contexts/AppContext";
-import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
 import Header from "@/components/layout/Header";
@@ -52,7 +51,6 @@ export default function AnuncioDetailPage({
   // Buscar dados do ad (com thumbnail)
   const { data: adsData } = useAds(activeAccount, adsetFromUrl || undefined);
 
-  const { goals } = useGoals(activeAccount);
 
   const adDailyRows = useMemo(() => {
     if (!allAdDaily?.data) return [];
@@ -141,7 +139,7 @@ export default function AnuncioDetailPage({
             ))}
           </div>
         ) : (
-          <KpiGrid metrics={metrics} goals={goals} />
+          <KpiGrid metrics={metrics} />
         )}
 
         {chartData.length > 0 && (

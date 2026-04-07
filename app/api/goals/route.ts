@@ -7,16 +7,13 @@ export async function GET(req: NextRequest) {
   const campaignId = searchParams.get("campaign_id");
 
   if (!accountId) {
-    return NextResponse.json(
-      { error: "account_id is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "account_id is required" }, { status: 400 });
   }
 
   try {
     const supabase = createServerClient();
     let query = supabase
-      .from("goals")
+      .from("campaign_goals")
       .select("*")
       .eq("account_id", accountId)
       .order("created_at", { ascending: true });
@@ -37,28 +34,42 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { account_id, campaign_id, metric_key, target_value, comparison } = body;
+    const {
+      account_id,
+      campaign_id,
+      adset_id,
+      level = "campaign",
+      metric,
+      goal_value,
+      min_purchases_threshold = 3,
+      warning_threshold_pct = 0.3,
+      critical_threshold_pct = 0.6,
+    } = body;
 
-    if (!account_id || !metric_key || target_value === undefined) {
+    if (!account_id || !metric || goal_value === undefined) {
       return NextResponse.json(
-        { error: "account_id, metric_key, and target_value are required" },
+        { error: "account_id, metric, and goal_value are required" },
         { status: 400 }
       );
     }
 
     const supabase = createServerClient();
     const { data, error } = await supabase
-      .from("goals")
+      .from("campaign_goals")
       .upsert(
         {
           account_id,
           campaign_id: campaign_id || null,
-          metric_key,
-          target_value,
-          comparison: comparison || "lte",
+          adset_id: adset_id || null,
+          level,
+          metric,
+          goal_value,
+          min_purchases_threshold,
+          warning_threshold_pct,
+          critical_threshold_pct,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "account_id,campaign_id,metric_key" }
+        { onConflict: "account_id,campaign_id,adset_id,metric" }
       )
       .select()
       .single();
@@ -81,8 +92,7 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const supabase = createServerClient();
-    const { error } = await supabase.from("goals").delete().eq("id", id);
-
+    const { error } = await supabase.from("campaign_goals").delete().eq("id", id);
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -219,7 +219,7 @@ export default function GeralPage() {
             ))}
           </div>
         ) : (
-          <KpiGrid metrics={totalMetrics} goals={[]} />
+          <KpiGrid metrics={totalMetrics} />
         )}
 
         {/* Grafico consolidado */}

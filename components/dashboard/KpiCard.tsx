@@ -2,22 +2,18 @@
 
 import { formatMetric } from "@/lib/metrics";
 import { MetricDefinition } from "@/types/metrics";
-import { Goal } from "@/types/goals";
-import GoalIndicator from "./GoalIndicator";
 import { TrendingUp, TrendingDown } from "lucide-react";
 
 interface KpiCardProps {
   definition: MetricDefinition;
   value: number;
   previousValue?: number;
-  goal?: Goal;
 }
 
 export default function KpiCard({
   definition,
   value,
   previousValue,
-  goal,
 }: KpiCardProps) {
   const formattedValue = formatMetric(value, definition.format);
 
@@ -37,13 +33,6 @@ export default function KpiCard({
         <span className="text-xs text-text-muted font-medium uppercase tracking-wider">
           {definition.label}
         </span>
-        {goal && (
-          <GoalIndicator
-            actual={value}
-            target={goal.target_value}
-            comparison={goal.comparison}
-          />
-        )}
       </div>
 
       <div className="text-2xl font-bold text-text-primary mb-1">

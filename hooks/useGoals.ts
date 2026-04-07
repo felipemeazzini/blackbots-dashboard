@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Goal, GoalFormData } from "@/types/goals";
+import { CampaignGoal } from "@/types/goals";
 
 export function useGoals(accountId: string | null, campaignId?: string | null) {
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [goals, setGoals] = useState<CampaignGoal[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchGoals = useCallback(async () => {
@@ -31,30 +31,22 @@ export function useGoals(accountId: string | null, campaignId?: string | null) {
   }, [fetchGoals]);
 
   const saveGoal = useCallback(
-    async (formData: GoalFormData) => {
+    async (data: Record<string, unknown>) => {
       if (!accountId) return;
       const res = await fetch("/api/goals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          account_id: accountId,
-          campaign_id: formData.campaign_id || campaignId || null,
-          ...formData,
-        }),
+        body: JSON.stringify({ account_id: accountId, ...data }),
       });
-      if (res.ok) {
-        await fetchGoals();
-      }
+      if (res.ok) await fetchGoals();
     },
-    [accountId, campaignId, fetchGoals]
+    [accountId, fetchGoals]
   );
 
   const deleteGoal = useCallback(
     async (id: string) => {
       const res = await fetch(`/api/goals?id=${id}`, { method: "DELETE" });
-      if (res.ok) {
-        await fetchGoals();
-      }
+      if (res.ok) await fetchGoals();
     },
     [fetchGoals]
   );

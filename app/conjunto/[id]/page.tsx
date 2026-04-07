@@ -8,7 +8,6 @@ import {
   useAds,
 } from "@/hooks/useFacebookData";
 import { useAppContext } from "@/contexts/AppContext";
-import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
 import Header from "@/components/layout/Header";
@@ -66,7 +65,6 @@ export default function ConjuntoDetailPage({
   const { data: adsData, loading: adsLoading } = useAds(activeAccount, adsetId, autoRefreshInterval);
   const ads = adsData?.data || [];
 
-  const { goals } = useGoals(activeAccount);
 
   // Filtrar dados diarios DESTE adset
   const adsetDailyRows = useMemo(() => {
@@ -163,7 +161,7 @@ export default function ConjuntoDetailPage({
             ))}
           </div>
         ) : (
-          <KpiGrid metrics={metrics} goals={goals} />
+          <KpiGrid metrics={metrics} />
         )}
 
         {chartData.length > 0 && (

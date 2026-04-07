@@ -5,6 +5,7 @@ import { useAccounts, useInsights, useCampaigns, useAds } from "@/hooks/useFaceb
 import { useAppContext } from "@/contexts/AppContext";
 import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics } from "@/lib/metrics";
+import { getGoalStatus } from "@/lib/goals";
 import { ProcessedMetrics } from "@/types/metrics";
 import Header from "@/components/layout/Header";
 import KpiGrid from "@/components/dashboard/KpiGrid";
@@ -113,15 +114,21 @@ export default function DashboardPage() {
     return campaigns
       .map((c) => {
         const rows = byCampaign.get(c.id);
+        const m = rows ? aggregateMetrics(rows) : emptyMetrics();
+        const costGoal = goals.find((g) => g.campaign_id === c.id && g.metric === "cost_per_purchase");
+        const goalStatus = costGoal
+          ? getGoalStatus(m.costPerSale, costGoal, m.purchases)
+          : undefined;
         return {
           id: c.id,
           name: c.name,
           status: c.effective_status,
-          metrics: rows ? aggregateMetrics(rows) : emptyMetrics(),
+          metrics: m,
+          goalStatus,
         };
       })
       .sort((a, b) => b.metrics.spend - a.metrics.spend);
-  }, [campaignInsightsData, campaigns]);
+  }, [campaignInsightsData, campaigns, goals]);
 
   // Anuncios que venderam: agrupar por ad_id, filtrar purchases > 0
   type InsightRow = ProcessedMetrics & Record<string, unknown>;
@@ -182,7 +189,7 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : (
-          <KpiGrid metrics={metrics} goals={goals} />
+          <KpiGrid metrics={metrics} />
         )}
 
         {chartData.length > 0 && (
