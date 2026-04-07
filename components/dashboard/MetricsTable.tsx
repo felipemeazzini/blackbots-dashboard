@@ -124,7 +124,7 @@ export default function MetricsTable({
                         className="w-10 h-10 rounded-lg object-cover flex-shrink-0 bg-bg-hover"
                       />
                     )}
-                    <span className="truncate max-w-[250px]">{row.name}</span>
+                    <span className="truncate max-w-[250px]" title={row.name}>{row.name}</span>
                     {row.href && (
                       <ExternalLink size={12} className="text-text-muted flex-shrink-0" />
                     )}
