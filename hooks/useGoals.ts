@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { CampaignGoal } from "@/types/goals";
 
-export function useGoals(accountId: string | null, campaignId?: string | null) {
+export function useGoals(accountId: string | null) {
   const [goals, setGoals] = useState<CampaignGoal[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -11,10 +11,7 @@ export function useGoals(accountId: string | null, campaignId?: string | null) {
     if (!accountId) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set("account_id", accountId);
-      if (campaignId) params.set("campaign_id", campaignId);
-      const res = await fetch(`/api/goals?${params}`);
+      const res = await fetch(`/api/goals?account_id=${accountId}`);
       if (res.ok) {
         const json = await res.json();
         setGoals(json.data || []);
@@ -24,7 +21,7 @@ export function useGoals(accountId: string | null, campaignId?: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [accountId, campaignId]);
+  }, [accountId]);
 
   useEffect(() => {
     fetchGoals();

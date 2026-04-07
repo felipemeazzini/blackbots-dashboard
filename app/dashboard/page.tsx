@@ -115,9 +115,9 @@ export default function DashboardPage() {
       .map((c) => {
         const rows = byCampaign.get(c.id);
         const m = rows ? aggregateMetrics(rows) : emptyMetrics();
-        const costGoal = goals.find((g) => g.campaign_id === c.id && g.metric === "cost_per_purchase");
-        const goalStatus = costGoal
-          ? getGoalStatus(m.costPerSale, costGoal, m.purchases)
+        const goal = goals.find((g) => g.campaign_id === c.id);
+        const goalStatus = goal
+          ? getGoalStatus(m.costPerSale, goal, m.purchases)
           : undefined;
         return {
           id: c.id,

@@ -3,7 +3,9 @@
 import { useState, useMemo } from "react";
 import { useAccounts, useCampaigns, useInsights } from "@/hooks/useFacebookData";
 import { useAppContext } from "@/contexts/AppContext";
+import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics } from "@/lib/metrics";
+import { getGoalStatus } from "@/lib/goals";
 import { ProcessedMetrics } from "@/types/metrics";
 import Header from "@/components/layout/Header";
 import MetricsTable from "@/components/dashboard/MetricsTable";
@@ -27,6 +29,8 @@ export default function CampanhasPage() {
     (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
   );
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
+
+  const { goals } = useGoals(activeAccount);
 
   const { data: campaignsData, loading: campLoading } = useCampaigns(
     activeAccount,
@@ -60,14 +64,20 @@ export default function CampanhasPage() {
 
     return campaigns.map((c) => {
       const dailyRows = byCampaign.get(c.id);
+      const m = dailyRows ? aggregateMetrics(dailyRows) : emptyMetrics();
+      const goal = goals.find((g) => g.campaign_id === c.id);
+      const goalStatus = goal
+        ? getGoalStatus(m.costPerSale, goal, m.purchases)
+        : undefined;
       return {
         id: c.id,
         name: c.name,
         status: c.effective_status,
-        metrics: dailyRows ? aggregateMetrics(dailyRows) : emptyMetrics(),
+        metrics: m,
+        goalStatus,
       };
     });
-  }, [campaigns, insightsData]);
+  }, [campaigns, insightsData, goals]);
 
   const isLoading = campLoading || insLoading;
 

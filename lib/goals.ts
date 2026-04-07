@@ -1,61 +1,23 @@
 import { CampaignGoal, GoalStatus } from "@/types/goals";
 
 export function getGoalStatus(
-  actualValue: number,
+  costPerSale: number,
   goal: CampaignGoal,
   purchases: number
 ): GoalStatus {
+  if (!goal.cost_per_purchase_goal) return null;
   if (purchases < goal.min_purchases_threshold) return "insufficient";
 
-  const { goal_value, warning_threshold_pct, critical_threshold_pct, metric } = goal;
+  const target = goal.cost_per_purchase_goal;
+  const warningLimit = target * (1 + goal.warning_threshold_pct);
 
-  if (metric === "cost_per_purchase") {
-    // Lower is better
-    if (actualValue <= goal_value) return "green";
-    if (actualValue <= goal_value * (1 + warning_threshold_pct)) return "yellow";
-    if (actualValue <= goal_value * (1 + critical_threshold_pct)) return "red";
-    return "pause";
-  }
-
-  // ROAS — higher is better
-  if (actualValue >= goal_value) return "green";
-  if (actualValue >= goal_value * (1 - warning_threshold_pct)) return "yellow";
-  if (actualValue >= goal_value * (1 - critical_threshold_pct)) return "red";
-  return "pause";
+  if (costPerSale <= target) return "green";
+  if (costPerSale <= warningLimit) return "yellow";
+  return "red";
 }
 
-export const STATUS_CONFIG: Record<
-  GoalStatus,
-  { label: string; color: string; bgColor: string; dotColor: string }
-> = {
-  green: {
-    label: "Na meta",
-    color: "text-green",
-    bgColor: "bg-green/10",
-    dotColor: "bg-green",
-  },
-  yellow: {
-    label: "Atencao",
-    color: "text-yellow",
-    bgColor: "bg-yellow/10",
-    dotColor: "bg-yellow",
-  },
-  red: {
-    label: "Critico",
-    color: "text-red",
-    bgColor: "bg-red/10",
-    dotColor: "bg-red",
-  },
-  pause: {
-    label: "Pausar",
-    color: "text-red",
-    bgColor: "bg-red/20",
-    dotColor: "bg-red",
-  },
-  insufficient: {
-    label: "Dados insuficientes",
-    color: "text-text-muted",
-    bgColor: "bg-text-muted/10",
-    dotColor: "bg-text-muted",
-  },
+export const ROW_COLORS: Record<string, { bg: string; text: string }> = {
+  green: { bg: "rgba(34, 197, 94, 0.08)", text: "#22c55e" },
+  yellow: { bg: "rgba(234, 179, 8, 0.08)", text: "#eab308" },
+  red: { bg: "rgba(239, 68, 68, 0.08)", text: "#ef4444" },
 };

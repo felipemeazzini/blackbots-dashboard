@@ -4,7 +4,6 @@ import { createServerClient } from "@/lib/supabase-server";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const accountId = searchParams.get("account_id");
-  const campaignId = searchParams.get("campaign_id");
 
   if (!accountId) {
     return NextResponse.json({ error: "account_id is required" }, { status: 400 });
@@ -12,17 +11,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const supabase = createServerClient();
-    let query = supabase
+    const { data, error } = await supabase
       .from("campaign_goals")
       .select("*")
       .eq("account_id", accountId)
       .order("created_at", { ascending: true });
 
-    if (campaignId) {
-      query = query.eq("campaign_id", campaignId);
-    }
-
-    const { data, error } = await query;
     if (error) throw error;
     return NextResponse.json({ data: data || [] });
   } catch (error) {
@@ -37,18 +31,16 @@ export async function POST(req: NextRequest) {
     const {
       account_id,
       campaign_id,
-      adset_id,
       level = "campaign",
-      metric,
-      goal_value,
+      cost_per_purchase_goal,
       min_purchases_threshold = 3,
       warning_threshold_pct = 0.3,
       critical_threshold_pct = 0.6,
     } = body;
 
-    if (!account_id || !metric || goal_value === undefined) {
+    if (!account_id || !campaign_id) {
       return NextResponse.json(
-        { error: "account_id, metric, and goal_value are required" },
+        { error: "account_id and campaign_id are required" },
         { status: 400 }
       );
     }
@@ -59,17 +51,15 @@ export async function POST(req: NextRequest) {
       .upsert(
         {
           account_id,
-          campaign_id: campaign_id || null,
-          adset_id: adset_id || null,
+          campaign_id,
           level,
-          metric,
-          goal_value,
+          cost_per_purchase_goal: cost_per_purchase_goal || null,
           min_purchases_threshold,
           warning_threshold_pct,
           critical_threshold_pct,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "account_id,campaign_id,adset_id,metric" }
+        { onConflict: "account_id,campaign_id,level" }
       )
       .select()
       .single();

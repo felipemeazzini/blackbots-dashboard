@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { ProcessedMetrics, MetricKey, METRIC_DEFINITIONS } from "@/types/metrics";
 import { formatMetric } from "@/lib/metrics";
-import { GoalStatus } from "@/types/goals";
-import TrafficLight from "./TrafficLight";
+import { ROW_COLORS } from "@/lib/goals";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 
 interface MetricsTableRow {
@@ -14,7 +13,7 @@ interface MetricsTableRow {
   metrics: ProcessedMetrics;
   href?: string;
   thumbnailUrl?: string;
-  goalStatus?: GoalStatus;
+  goalStatus?: string | null;
 }
 
 interface MetricsTableProps {
@@ -74,8 +73,6 @@ export default function MetricsTable({
     return sortDir === "asc" ? aVal - bVal : bVal - aVal;
   });
 
-  const hasGoals = rows.some((r) => r.goalStatus);
-
   return (
     <div className="bg-bg-surface border border-border rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -88,11 +85,6 @@ export default function MetricsTable({
               <th className="text-left px-3 py-3 text-xs text-text-muted font-medium uppercase tracking-wider">
                 Status
               </th>
-              {hasGoals && (
-                <th className="text-center px-3 py-3 text-xs text-text-muted font-medium uppercase tracking-wider">
-                  Meta
-                </th>
-              )}
               {columns.map((key) => {
                 const def = METRIC_DEFINITIONS.find((d) => d.key === key);
                 if (!def) return null;
@@ -117,13 +109,18 @@ export default function MetricsTable({
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row) => (
+            {sortedRows.map((row) => {
+              const rowBg = row.goalStatus && row.goalStatus !== "insufficient" && ROW_COLORS[row.goalStatus]
+                ? ROW_COLORS[row.goalStatus].bg
+                : undefined;
+              return (
               <tr
                 key={row.id}
                 onClick={() => onRowClick?.(row.id)}
                 className={`border-b border-border/50 hover:bg-bg-hover transition-colors ${
                   onRowClick ? "cursor-pointer" : ""
                 }`}
+                style={rowBg ? { backgroundColor: rowBg } : undefined}
               >
                 <td className="px-4 py-3 text-text-primary font-medium">
                   <div className="flex items-center gap-3">
@@ -143,15 +140,6 @@ export default function MetricsTable({
                 <td className="px-3 py-3">
                   <StatusBadge status={row.status} />
                 </td>
-                {hasGoals && (
-                  <td className="text-center px-3 py-3">
-                    {row.goalStatus ? (
-                      <TrafficLight status={row.goalStatus} />
-                    ) : (
-                      <span className="text-text-muted text-xs">—</span>
-                    )}
-                  </td>
-                )}
                 {columns.map((key) => {
                   const def = METRIC_DEFINITIONS.find((d) => d.key === key);
                   if (!def) return null;
@@ -165,11 +153,12 @@ export default function MetricsTable({
                   );
                 })}
               </tr>
-            ))}
+            );
+            })}
             {sortedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={columns.length + 2 + (hasGoals ? 1 : 0)}
+                  colSpan={columns.length + 2}
                   className="text-center py-8 text-text-muted"
                 >
                   Nenhum dado encontrado
