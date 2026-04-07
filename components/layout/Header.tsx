@@ -3,7 +3,7 @@
 import { ReactNode } from "react";
 import { FacebookAdAccount } from "@/types/facebook";
 import DateRangePicker from "./DateRangePicker";
-import { Building2, RefreshCw, ArrowLeftRight } from "lucide-react";
+import { Building2, RefreshCw } from "lucide-react";
 
 const REFRESH_OPTIONS = [
   { value: 0, label: "Desligado" },
@@ -23,8 +23,6 @@ interface HeaderProps {
   onCustomChange?: (since: string, until: string) => void;
   autoRefreshInterval?: number;
   onAutoRefreshChange?: (ms: number) => void;
-  comparisonEnabled?: boolean;
-  onComparisonToggle?: (v: boolean) => void;
   actions?: ReactNode;
   title?: string;
   breadcrumbs?: { label: string; href?: string }[];
@@ -41,8 +39,6 @@ export default function Header({
   onCustomChange,
   autoRefreshInterval = 0,
   onAutoRefreshChange,
-  comparisonEnabled,
-  onComparisonToggle,
   actions,
   title,
   breadcrumbs,
@@ -102,21 +98,6 @@ export default function Header({
             onPresetChange={onPresetChange}
             onCustomChange={onCustomChange}
           />
-
-          {onComparisonToggle && (
-            <button
-              onClick={() => onComparisonToggle(!comparisonEnabled)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                comparisonEnabled
-                  ? "bg-accent text-[#1A1A1A]"
-                  : "bg-bg-surface text-text-secondary hover:bg-bg-hover"
-              }`}
-              title="Comparar com periodo anterior"
-            >
-              <ArrowLeftRight size={12} />
-              vs Anterior
-            </button>
-          )}
 
           {onAutoRefreshChange && (
             <>

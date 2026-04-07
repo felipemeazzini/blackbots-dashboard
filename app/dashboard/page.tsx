@@ -26,8 +26,6 @@ export default function DashboardPage() {
     dateQueryString,
     autoRefreshInterval,
     setAutoRefreshInterval,
-    comparisonEnabled,
-    setComparisonEnabled,
     previousDateQueryString,
   } = useAppContext();
 
@@ -79,7 +77,7 @@ export default function DashboardPage() {
 
   // Dados do periodo anterior (para comparacao)
   const { data: prevDailyData } = useInsights(
-    comparisonEnabled ? activeAccount : null,
+    previousDateQueryString ? activeAccount : null,
     previousDateQueryString || "",
     undefined,
     "1"
@@ -93,9 +91,9 @@ export default function DashboardPage() {
 
   // KPIs do periodo anterior (para comparacao)
   const previousMetrics: ProcessedMetrics | undefined = useMemo(() => {
-    if (!comparisonEnabled || !prevDailyData?.data?.length) return undefined;
+    if (!prevDailyData?.data?.length) return undefined;
     return aggregateMetrics(prevDailyData.data as ProcessedMetrics[]);
-  }, [comparisonEnabled, prevDailyData]);
+  }, [prevDailyData]);
 
   // Dados do grafico diario
   const chartData = useMemo(() => {
@@ -212,8 +210,6 @@ export default function DashboardPage() {
         onCustomChange={setCustomRange}
         autoRefreshInterval={autoRefreshInterval}
         onAutoRefreshChange={setAutoRefreshInterval}
-        comparisonEnabled={comparisonEnabled}
-        onComparisonToggle={setComparisonEnabled}
         actions={<ExportButton contentRef={contentRef} title={accountName} subtitle={dateRange.customSince && dateRange.customUntil ? `${dateRange.customSince} a ${dateRange.customUntil}` : dateRange.preset} />}
         title="Dashboard"
       />

@@ -18,8 +18,6 @@ interface AppContextType {
   dateQueryString: string;
   autoRefreshInterval: number;
   setAutoRefreshInterval: (ms: number) => void;
-  comparisonEnabled: boolean;
-  setComparisonEnabled: (v: boolean) => void;
   previousDateQueryString: string | null;
 }
 
@@ -39,14 +37,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedAccountId, setSelectedAccountIdState] = useState<string>("");
   const [dateRange, setDateRange] = useState<DateRangeState>({ preset: "last_7d" });
   const [autoRefreshInterval, setAutoRefreshIntervalState] = useState<number>(300000);
-  const [comparisonEnabled, setComparisonEnabledState] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     setSelectedAccountIdState(loadFromStorage("bb_account", ""));
     setDateRange(loadFromStorage("bb_dateRange", { preset: "last_7d" }));
     setAutoRefreshIntervalState(loadFromStorage("bb_autoRefresh", 300000));
-    setComparisonEnabledState(loadFromStorage("bb_comparison", false));
     setHydrated(true);
   }, []);
 
@@ -72,11 +68,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("bb_autoRefresh", JSON.stringify(ms));
   }, []);
 
-  const setComparisonEnabled = useCallback((v: boolean) => {
-    setComparisonEnabledState(v);
-    localStorage.setItem("bb_comparison", JSON.stringify(v));
-  }, []);
-
   const dateQueryString = (() => {
     const params = new URLSearchParams();
     if (dateRange.customSince && dateRange.customUntil) {
@@ -90,7 +81,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   })();
 
   const previousDateQueryString = (() => {
-    if (!comparisonEnabled) return null;
     const prev = getPreviousPeriodRange(dateRange.customSince, dateRange.customUntil);
     if (!prev) return null;
     const params = new URLSearchParams();
@@ -115,8 +105,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dateQueryString,
         autoRefreshInterval,
         setAutoRefreshInterval,
-        comparisonEnabled,
-        setComparisonEnabled,
         previousDateQueryString,
       }}
     >
