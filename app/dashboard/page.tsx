@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useEffect, useRef } from "react";
-import { useAccounts, useInsights, useCampaigns, useAds } from "@/hooks/useFacebookData";
+import { useAccounts, useInsights, useCampaigns } from "@/hooks/useFacebookData";
+import { useThumbnails } from "@/hooks/useThumbnails";
 import { useAppContext } from "@/contexts/AppContext";
 import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics } from "@/lib/metrics";
@@ -73,9 +74,6 @@ export default function DashboardPage() {
 
   const { data: campaignsData } = useCampaigns(activeAccount, undefined, autoRefreshInterval);
   const campaigns = campaignsData?.data || [];
-
-  // Metadados dos anuncios (nome, thumbnail)
-  const { data: adsData } = useAds(activeAccount);
 
   const { goals } = useGoals(activeAccount);
 
@@ -151,12 +149,11 @@ export default function DashboardPage() {
 
   // Anuncios que venderam: agrupar por ad_id, filtrar purchases > 0
   type InsightRow = ProcessedMetrics & Record<string, unknown>;
-  const adRows = useMemo(() => {
+  const baseAdRows = useMemo(() => {
     if (!adInsightsData?.data) return [];
     const insightsList = adInsightsData.data as InsightRow[];
-    const ads = adsData?.data || [];
 
-    const byAd = new Map<string, ProcessedMetrics[]>();
+    const byAd = new Map<string, InsightRow[]>();
     for (const row of insightsList) {
       const adId = String(row.ad_id);
       if (!adId || adId === "undefined") continue;
@@ -167,20 +164,28 @@ export default function DashboardPage() {
     return Array.from(byAd.entries())
       .map(([adId, rows]) => {
         const m = aggregateMetrics(rows);
-        const adMeta = ads.find((a) => a.id === adId);
-        // Get ad_name from first insight row
-        const firstName = rows[0] ? String((rows[0] as InsightRow).ad_name || "") : "";
+        const firstName = rows[0] ? String(rows[0].ad_name || "") : "";
         return {
           id: adId,
-          name: adMeta?.name || firstName || adId,
-          status: adMeta?.effective_status || "UNKNOWN",
+          name: firstName || adId,
+          status: "UNKNOWN",
           metrics: m,
-          thumbnailUrl: adMeta?.thumbnail_url || undefined,
         };
       })
       .filter((r) => r.metrics.purchases > 0)
       .sort((a, b) => b.metrics.purchases - a.metrics.purchases);
-  }, [adInsightsData, adsData]);
+  }, [adInsightsData]);
+
+  // Fetch thumbnails for ads that sold
+  const adIdsWithSales = useMemo(() => baseAdRows.map((r) => r.id), [baseAdRows]);
+  const adThumbnails = useThumbnails(adIdsWithSales);
+
+  const adRows = useMemo(() => {
+    return baseAdRows.map((r) => ({
+      ...r,
+      thumbnailUrl: adThumbnails[r.id] || undefined,
+    }));
+  }, [baseAdRows, adThumbnails]);
 
   // Gasto do mes atual para o budget tracker
   const { data: monthData } = useInsights(activeAccount, "preset=this_month", undefined, "1");

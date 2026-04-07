@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useAccounts, useInsights, useAds } from "@/hooks/useFacebookData";
+import { useAccounts, useInsights } from "@/hooks/useFacebookData";
+import { useThumbnails } from "@/hooks/useThumbnails";
 import { useAppContext } from "@/contexts/AppContext";
 import { aggregateMetrics, emptyMetrics, formatMetric } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
@@ -35,7 +36,6 @@ export default function RankingPage() {
   const { data: adInsights, loading } = useInsights(
     activeAccount, dateQueryString, "ad", "1", autoRefreshInterval
   );
-  const { data: adsData } = useAds(activeAccount);
 
   const [onlySales, setOnlySales] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("costPerSale");
@@ -46,10 +46,10 @@ export default function RankingPage() {
     else { setSortKey(key); setSortDir(key === "costPerSale" ? "asc" : "desc"); }
   };
 
-  const rows = useMemo(() => {
+  // Build base rows from insights
+  const baseRows = useMemo(() => {
     if (!adInsights?.data) return [];
     const insightsList = adInsights.data as InsightRow[];
-    const ads = adsData?.data || [];
 
     const byAd = new Map<string, InsightRow[]>();
     for (const row of insightsList) {
@@ -59,18 +59,28 @@ export default function RankingPage() {
       byAd.get(adId)!.push(row);
     }
 
-    let result = Array.from(byAd.entries()).map(([adId, dailyRows]) => {
+    return Array.from(byAd.entries()).map(([adId, dailyRows]) => {
       const m = aggregateMetrics(dailyRows);
-      const adMeta = ads.find((a) => a.id === adId);
       const campaignName = dailyRows[0] ? String(dailyRows[0].campaign_name || "") : "";
       return {
         id: adId,
-        name: adMeta?.name || String(dailyRows[0]?.ad_name || adId),
+        name: String(dailyRows[0]?.ad_name || adId),
         campaignName,
-        thumbnailUrl: adMeta?.thumbnail_url || undefined,
         metrics: m,
       };
     });
+  }, [adInsights]);
+
+  // Fetch thumbnails for all ad IDs
+  const adIds = useMemo(() => baseRows.map((r) => r.id), [baseRows]);
+  const thumbnails = useThumbnails(adIds);
+
+  // Final sorted rows with thumbnails
+  const rows = useMemo(() => {
+    let result = baseRows.map((r) => ({
+      ...r,
+      thumbnailUrl: thumbnails[r.id] || undefined,
+    }));
 
     if (onlySales) result = result.filter((r) => r.metrics.purchases > 0);
 
@@ -78,7 +88,6 @@ export default function RankingPage() {
       const aVal = a.metrics[sortKey];
       const bVal = b.metrics[sortKey];
       if (sortKey === "costPerSale") {
-        // 0 (no sales) goes to bottom
         if (aVal === 0 && bVal === 0) return 0;
         if (aVal === 0) return 1;
         if (bVal === 0) return -1;
@@ -87,7 +96,7 @@ export default function RankingPage() {
     });
 
     return result;
-  }, [adInsights, adsData, onlySales, sortKey, sortDir]);
+  }, [baseRows, thumbnails, onlySales, sortKey, sortDir]);
 
   // Ranking colors: top 25% green border, bottom 25% red border
   const topThreshold = Math.ceil(rows.length * 0.25);

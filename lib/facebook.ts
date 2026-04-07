@@ -80,7 +80,7 @@ export async function getAds(
 ): Promise<FacebookResponse<FacebookAd>> {
   const params: Record<string, string> = {
     fields: "id,name,status,effective_status,campaign_id,adset_id,creative{thumbnail_url,image_url}",
-    limit: "100",
+    limit: "500",
   };
   if (adsetId) {
     params.filtering = JSON.stringify([
@@ -88,6 +88,35 @@ export async function getAds(
     ]);
   }
   return fbRequest(`/${accountId}/ads`, params);
+}
+
+export async function getAdThumbnails(
+  adIds: string[]
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  // Facebook batch: fetch up to 50 ads at a time using ?ids=
+  const chunks = [];
+  for (let i = 0; i < adIds.length; i += 50) {
+    chunks.push(adIds.slice(i, i + 50));
+  }
+  for (const chunk of chunks) {
+    try {
+      const data = await fbRequest<Record<string, { creative?: { image_url?: string; thumbnail_url?: string } }>>(
+        "/",
+        {
+          ids: chunk.join(","),
+          fields: "creative{image_url,thumbnail_url}",
+        }
+      );
+      for (const [id, ad] of Object.entries(data)) {
+        const url = ad?.creative?.image_url || ad?.creative?.thumbnail_url;
+        if (url) result[id] = url;
+      }
+    } catch {
+      // skip failed batch
+    }
+  }
+  return result;
 }
 
 export async function getInsights(
