@@ -1,0 +1,39 @@
+"use client";
+
+import { useState, RefObject } from "react";
+import { FileDown, Loader2 } from "lucide-react";
+
+interface ExportButtonProps {
+  contentRef: RefObject<HTMLDivElement | null>;
+  title: string;
+  subtitle: string;
+}
+
+export default function ExportButton({ contentRef, title, subtitle }: ExportButtonProps) {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!contentRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const { exportDashboardPdf } = await import("@/lib/export-pdf");
+      await exportDashboardPdf(contentRef.current, title, subtitle);
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleExport}
+      disabled={exporting}
+      className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-surface border border-border rounded-lg text-xs text-text-secondary hover:text-text-primary hover:border-accent transition-colors disabled:opacity-50"
+      title="Exportar como PDF"
+    >
+      {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+      {exporting ? "Gerando..." : "PDF"}
+    </button>
+  );
+}

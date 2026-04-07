@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Megaphone, Target, Globe } from "lucide-react";
+import { LayoutDashboard, Megaphone, Target, Globe, Trophy } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/geral", label: "Visao Geral", icon: Globe },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/campanhas", label: "Campanhas", icon: Megaphone },
+  { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/metas", label: "Metas", icon: Target },
 ];
 

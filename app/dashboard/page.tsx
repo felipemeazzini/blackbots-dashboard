@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { useAccounts, useInsights, useCampaigns, useAds } from "@/hooks/useFacebookData";
 import { useAppContext } from "@/contexts/AppContext";
 import { useGoals } from "@/hooks/useGoals";
@@ -12,6 +12,8 @@ import KpiGrid from "@/components/dashboard/KpiGrid";
 import MetricsTable from "@/components/dashboard/MetricsTable";
 import SpendAreaChart from "@/components/charts/AreaChart";
 import { KpiSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
+import BudgetTracker from "@/components/dashboard/BudgetTracker";
+import ExportButton from "@/components/dashboard/ExportButton";
 
 export default function DashboardPage() {
   const {
@@ -23,6 +25,9 @@ export default function DashboardPage() {
     dateQueryString,
     autoRefreshInterval,
     setAutoRefreshInterval,
+    comparisonEnabled,
+    setComparisonEnabled,
+    previousDateQueryString,
   } = useAppContext();
 
   const { data: accountsData, loading: accountsLoading } = useAccounts();
@@ -74,11 +79,25 @@ export default function DashboardPage() {
 
   const { goals } = useGoals(activeAccount);
 
+  // Dados do periodo anterior (para comparacao)
+  const { data: prevDailyData } = useInsights(
+    comparisonEnabled ? activeAccount : null,
+    previousDateQueryString || "",
+    undefined,
+    "1"
+  );
+
   // KPIs: agregar dados diarios
   const metrics: ProcessedMetrics = useMemo(() => {
     if (!dailyData?.data?.length) return emptyMetrics();
     return aggregateMetrics(dailyData.data as ProcessedMetrics[]);
   }, [dailyData]);
+
+  // KPIs do periodo anterior (para comparacao)
+  const previousMetrics: ProcessedMetrics | undefined = useMemo(() => {
+    if (!comparisonEnabled || !prevDailyData?.data?.length) return undefined;
+    return aggregateMetrics(prevDailyData.data as ProcessedMetrics[]);
+  }, [comparisonEnabled, prevDailyData]);
 
   // Dados do grafico diario
   const chartData = useMemo(() => {
@@ -163,7 +182,17 @@ export default function DashboardPage() {
       .sort((a, b) => b.metrics.purchases - a.metrics.purchases);
   }, [adInsightsData, adsData]);
 
+  // Gasto do mes atual para o budget tracker
+  const { data: monthData } = useInsights(activeAccount, "preset=this_month", undefined, "1");
+  const monthSpend = useMemo(() => {
+    if (!monthData?.data?.length) return 0;
+    return (monthData.data as ProcessedMetrics[]).reduce((sum, d) => sum + d.spend, 0);
+  }, [monthData]);
+
+  const contentRef = useRef<HTMLDivElement>(null);
   const isLoading = accountsLoading || dailyLoading;
+
+  const accountName = accounts.find((a) => a.id === activeAccount)?.name || "";
 
   return (
     <div>
@@ -178,10 +207,16 @@ export default function DashboardPage() {
         onCustomChange={setCustomRange}
         autoRefreshInterval={autoRefreshInterval}
         onAutoRefreshChange={setAutoRefreshInterval}
+        comparisonEnabled={comparisonEnabled}
+        onComparisonToggle={setComparisonEnabled}
+        actions={<ExportButton contentRef={contentRef} title={accountName} subtitle={dateRange.customSince && dateRange.customUntil ? `${dateRange.customSince} a ${dateRange.customUntil}` : dateRange.preset} />}
         title="Dashboard"
       />
 
-      <div className="p-6 space-y-6">
+      <div ref={contentRef} className="p-6 space-y-6">
+        {/* Budget Tracker */}
+        <BudgetTracker accountId={activeAccount} currentSpend={monthSpend} />
+
         {isLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {Array.from({ length: 12 }).map((_, i) => (
@@ -189,7 +224,7 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : (
-          <KpiGrid metrics={metrics} />
+          <KpiGrid metrics={metrics} previousMetrics={previousMetrics} />
         )}
 
         {chartData.length > 0 && (

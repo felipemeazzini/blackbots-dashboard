@@ -1,3 +1,5 @@
+import { format, subDays, differenceInDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
+
 export interface DatePreset {
   key: string;
   label: string;
@@ -25,4 +27,23 @@ export function getTimeRangeParam(
     return { since: customSince, until: customUntil };
   }
   return preset;
+}
+
+export function getPreviousPeriodRange(
+  customSince?: string,
+  customUntil?: string
+): { since: string; until: string } | null {
+  if (!customSince || !customUntil) return null;
+
+  const since = new Date(customSince);
+  const until = new Date(customUntil);
+  const days = differenceInDays(until, since) + 1;
+
+  const prevUntil = subDays(since, 1);
+  const prevSince = subDays(prevUntil, days - 1);
+
+  return {
+    since: format(prevSince, "yyyy-MM-dd"),
+    until: format(prevUntil, "yyyy-MM-dd"),
+  };
 }
