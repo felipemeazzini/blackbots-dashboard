@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useEffect } from "react";
-import { useAccounts, useInsights, useCampaigns } from "@/hooks/useFacebookData";
+import { useAccounts, useInsights, useCampaigns, useAds } from "@/hooks/useFacebookData";
 import { useAppContext } from "@/contexts/AppContext";
 import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics } from "@/lib/metrics";
@@ -54,8 +54,20 @@ export default function DashboardPage() {
     autoRefreshInterval
   );
 
+  // Insights por anuncio
+  const { data: adInsightsData } = useInsights(
+    activeAccount,
+    dateQueryString,
+    "ad",
+    "1",
+    autoRefreshInterval
+  );
+
   const { data: campaignsData } = useCampaigns(activeAccount, undefined, autoRefreshInterval);
   const campaigns = campaignsData?.data || [];
+
+  // Metadados dos anuncios (nome, thumbnail)
+  const { data: adsData } = useAds(activeAccount);
 
   const { goals } = useGoals(activeAccount);
 
@@ -108,6 +120,39 @@ export default function DashboardPage() {
       })
       .sort((a, b) => b.metrics.spend - a.metrics.spend);
   }, [campaignInsightsData, campaigns]);
+
+  // Anuncios que venderam: agrupar por ad_id, filtrar purchases > 0
+  type InsightRow = ProcessedMetrics & Record<string, unknown>;
+  const adRows = useMemo(() => {
+    if (!adInsightsData?.data) return [];
+    const insightsList = adInsightsData.data as InsightRow[];
+    const ads = adsData?.data || [];
+
+    const byAd = new Map<string, ProcessedMetrics[]>();
+    for (const row of insightsList) {
+      const adId = String(row.ad_id);
+      if (!adId || adId === "undefined") continue;
+      if (!byAd.has(adId)) byAd.set(adId, []);
+      byAd.get(adId)!.push(row);
+    }
+
+    return Array.from(byAd.entries())
+      .map(([adId, rows]) => {
+        const m = aggregateMetrics(rows);
+        const adMeta = ads.find((a) => a.id === adId);
+        // Get ad_name from first insight row
+        const firstName = rows[0] ? String((rows[0] as InsightRow).ad_name || "") : "";
+        return {
+          id: adId,
+          name: adMeta?.name || firstName || adId,
+          status: adMeta?.effective_status || "UNKNOWN",
+          metrics: m,
+          thumbnailUrl: adMeta?.thumbnail_url || undefined,
+        };
+      })
+      .filter((r) => r.metrics.purchases > 0)
+      .sort((a, b) => b.metrics.purchases - a.metrics.purchases);
+  }, [adInsightsData, adsData]);
 
   const isLoading = accountsLoading || dailyLoading;
 
@@ -174,6 +219,20 @@ export default function DashboardPage() {
             />
           )}
         </div>
+        {/* Anuncios que venderam */}
+        {adRows.length > 0 && (
+          <div>
+            <h3 className="text-sm font-medium text-text-secondary mb-3">
+              Anuncios que Venderam ({adRows.length})
+            </h3>
+            <MetricsTable
+              rows={adRows}
+              onRowClick={(id) =>
+                (window.location.href = `/anuncio/${id}`)
+              }
+            />
+          </div>
+        )}
       </div>
     </div>
   );
