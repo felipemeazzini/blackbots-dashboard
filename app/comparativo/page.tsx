@@ -89,7 +89,7 @@ export default function ComparativoPage() {
 
       <div className="p-6 space-y-6">
         {/* Seletores de periodo */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-center">
           {/* Periodo A */}
           <div className="bg-bg-surface border border-accent/30 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -122,6 +122,19 @@ export default function ComparativoPage() {
               <p className="text-xs text-text-muted mt-2">{formatLabel(sinceA, untilA)}</p>
             )}
           </div>
+
+          {/* Botao inverter */}
+          <button
+            onClick={() => {
+              const tmpSA = sinceA, tmpUA = untilA;
+              setSinceA(sinceB); setUntilA(untilB);
+              setSinceB(tmpSA); setUntilB(tmpUA);
+            }}
+            className="hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-bg-surface border border-border hover:border-accent hover:text-accent text-text-muted transition-colors"
+            title="Inverter periodos"
+          >
+            <ArrowLeftRight size={16} />
+          </button>
 
           {/* Periodo B */}
           <div className="bg-bg-surface border border-purple/30 rounded-xl p-5">
