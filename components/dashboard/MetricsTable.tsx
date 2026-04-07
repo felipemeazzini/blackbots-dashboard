@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ProcessedMetrics, MetricKey, METRIC_DEFINITIONS } from "@/types/metrics";
 import { formatMetric } from "@/lib/metrics";
 import { ROW_COLORS } from "@/lib/goals";
+import AdThumbnail from "@/components/ui/AdThumbnail";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 
 interface MetricsTableRow {
@@ -125,11 +126,7 @@ export default function MetricsTable({
                 <td className="px-4 py-3 text-text-primary font-medium">
                   <div className="flex items-center gap-3">
                     {row.thumbnailUrl && (
-                      <img
-                        src={row.thumbnailUrl}
-                        alt=""
-                        className="w-10 h-10 rounded-lg object-cover flex-shrink-0 bg-bg-hover"
-                      />
+                      <AdThumbnail src={row.thumbnailUrl} alt={row.name} />
                     )}
                     <span className="truncate max-w-[250px]" title={row.name}>{row.name}</span>
                     {row.href && (

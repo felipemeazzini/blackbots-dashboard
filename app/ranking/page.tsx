@@ -8,6 +8,7 @@ import { ProcessedMetrics } from "@/types/metrics";
 import Header from "@/components/layout/Header";
 import DateRangePicker from "@/components/layout/DateRangePicker";
 import { KpiSkeleton } from "@/components/ui/Skeleton";
+import AdThumbnail from "@/components/ui/AdThumbnail";
 import { Trophy, ChevronDown, ChevronUp, Filter } from "lucide-react";
 
 type InsightRow = ProcessedMetrics & Record<string, unknown>;
@@ -172,7 +173,7 @@ export default function RankingPage() {
                         <td className="px-4 py-3 text-text-primary font-medium">
                           <div className="flex items-center gap-3">
                             {row.thumbnailUrl && (
-                              <img src={row.thumbnailUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0 bg-bg-hover" />
+                              <AdThumbnail src={row.thumbnailUrl} alt={row.name} size="md" />
                             )}
                             <span className="truncate max-w-[200px]" title={row.name}>{row.name}</span>
                           </div>

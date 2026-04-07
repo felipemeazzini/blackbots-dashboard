@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       const creative = adAny.creative as Record<string, string> | undefined;
       return {
         ...ad,
-        thumbnail_url: creative?.thumbnail_url || creative?.image_url || null,
+        thumbnail_url: creative?.image_url || creative?.thumbnail_url || null,
       };
     });
     return NextResponse.json({ data });
