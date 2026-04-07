@@ -6,7 +6,7 @@ export function getGoalStatus(
   purchases: number
 ): GoalStatus {
   if (!goal.cost_per_purchase_goal) return null;
-  if (purchases < goal.min_purchases_threshold) return "insufficient";
+  if (purchases === 0) return "insufficient";
 
   const target = goal.cost_per_purchase_goal;
   const warningLimit = target * (1 + goal.warning_threshold_pct);
