@@ -1,15 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAccounts, useInsights } from "@/hooks/useFacebookData";
+import { useAccounts, useInsights, useCampaigns, useAds } from "@/hooks/useFacebookData";
 import { useAppContext } from "@/contexts/AppContext";
 import { aggregateMetrics, emptyMetrics, formatMetric } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
-import Header from "@/components/layout/Header";
 import KpiGrid from "@/components/dashboard/KpiGrid";
+import MetricsTable from "@/components/dashboard/MetricsTable";
 import SpendAreaChart from "@/components/charts/AreaChart";
-import { KpiSkeleton } from "@/components/ui/Skeleton";
-import { Building2 } from "lucide-react";
+import DateRangePicker from "@/components/layout/DateRangePicker";
+import { KpiSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
+import { Building2, RefreshCw } from "lucide-react";
 
 type InsightRow = ProcessedMetrics & Record<string, unknown>;
 
@@ -31,28 +32,24 @@ export default function GeralPage() {
       !a.name.includes("Test ")
   );
 
-  // Buscar insights diarios de CADA conta
-  const { data: data0 } = useInsights(
-    allAccounts[0]?.id || null,
-    dateQueryString,
-    undefined,
-    "1",
-    autoRefreshInterval
-  );
-  const { data: data1 } = useInsights(
-    allAccounts[1]?.id || null,
-    dateQueryString,
-    undefined,
-    "1",
-    autoRefreshInterval
-  );
-  const { data: data2 } = useInsights(
-    allAccounts[2]?.id || null,
-    dateQueryString,
-    undefined,
-    "1",
-    autoRefreshInterval
-  );
+  // Insights diarios por conta
+  const { data: data0 } = useInsights(allAccounts[0]?.id || null, dateQueryString, undefined, "1", autoRefreshInterval);
+  const { data: data1 } = useInsights(allAccounts[1]?.id || null, dateQueryString, undefined, "1", autoRefreshInterval);
+  const { data: data2 } = useInsights(allAccounts[2]?.id || null, dateQueryString, undefined, "1", autoRefreshInterval);
+
+  // Insights por campanha por conta
+  const { data: camp0 } = useInsights(allAccounts[0]?.id || null, dateQueryString, "campaign", "1", autoRefreshInterval);
+  const { data: camp1 } = useInsights(allAccounts[1]?.id || null, dateQueryString, "campaign", "1", autoRefreshInterval);
+
+  // Insights por anuncio por conta
+  const { data: ad0 } = useInsights(allAccounts[0]?.id || null, dateQueryString, "ad", "1", autoRefreshInterval);
+  const { data: ad1 } = useInsights(allAccounts[1]?.id || null, dateQueryString, "ad", "1", autoRefreshInterval);
+
+  // Campanhas e ads metadata
+  const { data: campaigns0 } = useCampaigns(allAccounts[0]?.id || null);
+  const { data: campaigns1 } = useCampaigns(allAccounts[1]?.id || null);
+  const { data: ads0 } = useAds(allAccounts[0]?.id || null);
+  const { data: ads1 } = useAds(allAccounts[1]?.id || null);
 
   // Metricas por conta
   const accountMetrics = useMemo(() => {
@@ -69,17 +66,16 @@ export default function GeralPage() {
     });
   }, [allAccounts, data0, data1, data2]);
 
-  // KPIs consolidados (todas as contas)
+  // KPIs consolidados
   const totalMetrics: ProcessedMetrics = useMemo(() => {
-    const allMetrics = accountMetrics.filter((a) => a.metrics.spend > 0);
-    if (allMetrics.length === 0) return emptyMetrics();
-    return aggregateMetrics(allMetrics.map((a) => a.metrics));
+    const all = accountMetrics.filter((a) => a.metrics.spend > 0);
+    if (all.length === 0) return emptyMetrics();
+    return aggregateMetrics(all.map((a) => a.metrics));
   }, [accountMetrics]);
 
-  // Grafico consolidado: somar gasto diario de todas as contas
+  // Grafico consolidado
   const chartData = useMemo(() => {
     const byDate = new Map<string, { spend: number; purchases: number }>();
-
     for (const acc of accountMetrics) {
       for (const row of acc.dailyRows) {
         const date = row.dateStart || "";
@@ -90,72 +86,126 @@ export default function GeralPage() {
         byDate.set(date, existing);
       }
     }
-
     return Array.from(byDate.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, vals]) => ({
-        date: new Date(date).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "2-digit",
-        }),
+        date: new Date(date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
         value: vals.spend,
         value2: vals.purchases,
       }));
   }, [accountMetrics]);
 
+  // Campanhas consolidadas (todas as contas)
+  const campaignRows = useMemo(() => {
+    const allCampInsights = [
+      ...(camp0?.data || []),
+      ...(camp1?.data || []),
+    ] as InsightRow[];
+    const allCamps = [
+      ...(campaigns0?.data || []),
+      ...(campaigns1?.data || []),
+    ];
+
+    const byCampaign = new Map<string, InsightRow[]>();
+    for (const row of allCampInsights) {
+      const cid = String(row.campaign_id);
+      if (!cid || cid === "undefined") continue;
+      if (!byCampaign.has(cid)) byCampaign.set(cid, []);
+      byCampaign.get(cid)!.push(row);
+    }
+
+    return allCamps
+      .map((c) => {
+        const rows = byCampaign.get(c.id);
+        return {
+          id: c.id,
+          name: c.name,
+          status: c.effective_status,
+          metrics: rows ? aggregateMetrics(rows) : emptyMetrics(),
+        };
+      })
+      .filter((r) => r.metrics.spend > 0)
+      .sort((a, b) => b.metrics.spend - a.metrics.spend);
+  }, [camp0, camp1, campaigns0, campaigns1]);
+
+  // Anuncios que venderam (todas as contas)
+  const adRows = useMemo(() => {
+    const allAdInsights = [
+      ...(ad0?.data || []),
+      ...(ad1?.data || []),
+    ] as InsightRow[];
+    const allAds = [
+      ...(ads0?.data || []),
+      ...(ads1?.data || []),
+    ];
+
+    const byAd = new Map<string, InsightRow[]>();
+    for (const row of allAdInsights) {
+      const adId = String(row.ad_id);
+      if (!adId || adId === "undefined") continue;
+      if (!byAd.has(adId)) byAd.set(adId, []);
+      byAd.get(adId)!.push(row);
+    }
+
+    return Array.from(byAd.entries())
+      .map(([adId, rows]) => {
+        const m = aggregateMetrics(rows);
+        const adMeta = allAds.find((a) => a.id === adId);
+        const firstName = rows[0] ? String(rows[0].ad_name || "") : "";
+        return {
+          id: adId,
+          name: adMeta?.name || firstName || adId,
+          status: adMeta?.effective_status || "UNKNOWN",
+          metrics: m,
+          thumbnailUrl: adMeta?.thumbnail_url || undefined,
+        };
+      })
+      .filter((r) => r.metrics.purchases > 0)
+      .sort((a, b) => b.metrics.purchases - a.metrics.purchases);
+  }, [ad0, ad1, ads0, ads1]);
+
   const isLoading = accountsLoading || (!data0 && allAccounts.length > 0);
+  const isAutoRefreshActive = autoRefreshInterval > 0;
 
   return (
     <div>
+      {/* Header com DateRangePicker */}
       <header className="sticky top-0 z-40 bg-bg-primary/80 backdrop-blur-sm border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-text-primary">
-              Visao Geral — Todas as Contas
+              Visao Geral
             </h2>
             <p className="text-xs text-text-muted">
               {allAccounts.length} contas consolidadas
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {/* Date picker sem seletor de conta */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {[
-                { key: "last_7d", label: "7d" },
-                { key: "last_14d", label: "14d" },
-                { key: "last_30d", label: "30d" },
-                { key: "this_month", label: "Mes" },
-                { key: "last_90d", label: "90d" },
-              ].map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => setPreset(p.key)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    dateRange.preset === p.key
-                      ? "bg-accent text-[#1A1A1A]"
-                      : "bg-bg-surface text-text-secondary hover:bg-bg-hover"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+            <DateRangePicker
+              selectedPreset={dateRange.preset}
+              customSince={dateRange.customSince}
+              customUntil={dateRange.customUntil}
+              onPresetChange={setPreset}
+              onCustomChange={setCustomRange}
+            />
+            <div className="w-px h-6 bg-border" />
+            <div className="flex items-center gap-2">
+              <RefreshCw
+                size={14}
+                className={isAutoRefreshActive ? "text-green animate-spin" : "text-text-muted"}
+                style={isAutoRefreshActive ? { animationDuration: "3s" } : undefined}
+              />
+              <select
+                value={autoRefreshInterval}
+                onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+                className="bg-bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
+              >
+                <option value={0}>Desligado</option>
+                <option value={60000}>1 min</option>
+                <option value={300000}>5 min</option>
+                <option value={900000}>15 min</option>
+              </select>
             </div>
-
-            {autoRefreshInterval !== undefined && (
-              <>
-                <div className="w-px h-6 bg-border" />
-                <select
-                  value={autoRefreshInterval}
-                  onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-                  className="bg-bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
-                >
-                  <option value={0}>Desligado</option>
-                  <option value={60000}>1 min</option>
-                  <option value={300000}>5 min</option>
-                  <option value={900000}>15 min</option>
-                </select>
-              </>
-            )}
           </div>
         </div>
       </header>
@@ -184,10 +234,7 @@ export default function GeralPage() {
               dataKey2="value2"
               label2="Vendas"
               formatValue={(v) =>
-                v.toLocaleString("pt-BR", {
-                  style: "currency",
-                  currency: "BRL",
-                })
+                v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
               }
               formatValue2={(v) => String(Math.round(v))}
             />
@@ -207,56 +254,58 @@ export default function GeralPage() {
               >
                 <div className="flex items-center gap-2 mb-4">
                   <Building2 size={16} className="text-accent" />
-                  <h4 className="text-sm font-semibold text-text-primary">
-                    {acc.name}
-                  </h4>
-                  <span className="text-[10px] text-text-muted ml-auto">
-                    {acc.currency}
-                  </span>
+                  <h4 className="text-sm font-semibold text-text-primary">{acc.name}</h4>
+                  <span className="text-[10px] text-text-muted ml-auto">{acc.currency}</span>
                 </div>
-
                 <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <p className="text-[10px] text-text-muted uppercase">Gasto</p>
-                    <p className="text-sm font-bold text-text-primary">
-                      {formatMetric(acc.metrics.spend, "currency")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-text-muted uppercase">Vendas</p>
-                    <p className="text-sm font-bold text-text-primary">
-                      {acc.metrics.purchases}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-text-muted uppercase">Custo/Venda</p>
-                    <p className="text-sm font-bold text-text-primary">
-                      {formatMetric(acc.metrics.costPerSale, "currency")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-text-muted uppercase">CPM</p>
-                    <p className="text-sm font-bold text-text-primary">
-                      {formatMetric(acc.metrics.cpm, "currency")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-text-muted uppercase">CPC</p>
-                    <p className="text-sm font-bold text-text-primary">
-                      {formatMetric(acc.metrics.cpc, "currency")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-text-muted uppercase">ROAS</p>
-                    <p className="text-sm font-bold text-text-primary">
-                      {acc.metrics.roas.toFixed(2)}
-                    </p>
-                  </div>
+                  {[
+                    { label: "Gasto", value: formatMetric(acc.metrics.spend, "currency") },
+                    { label: "Vendas", value: String(acc.metrics.purchases) },
+                    { label: "Custo/Venda", value: formatMetric(acc.metrics.costPerSale, "currency") },
+                    { label: "CPM", value: formatMetric(acc.metrics.cpm, "currency") },
+                    { label: "CPC", value: formatMetric(acc.metrics.cpc, "currency") },
+                    { label: "ROAS", value: acc.metrics.roas.toFixed(2) },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <p className="text-[10px] text-text-muted uppercase">{item.label}</p>
+                      <p className="text-sm font-bold text-text-primary">{item.value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Campanhas */}
+        {campaignRows.length > 0 && (
+          <div>
+            <h3 className="text-sm font-medium text-text-secondary mb-3">
+              Campanhas ({campaignRows.length})
+            </h3>
+            {isLoading ? (
+              <TableSkeleton />
+            ) : (
+              <MetricsTable
+                rows={campaignRows}
+                onRowClick={(id) => (window.location.href = `/campanha/${id}`)}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Anuncios que venderam */}
+        {adRows.length > 0 && (
+          <div>
+            <h3 className="text-sm font-medium text-text-secondary mb-3">
+              Anuncios que Venderam ({adRows.length})
+            </h3>
+            <MetricsTable
+              rows={adRows}
+              onRowClick={(id) => (window.location.href = `/anuncio/${id}`)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
