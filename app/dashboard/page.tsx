@@ -25,7 +25,9 @@ export default function DashboardPage() {
   } = useAppContext();
 
   const { data: accountsData, loading: accountsLoading } = useAccounts();
-  const accounts = accountsData?.data || [];
+  const accounts = (accountsData?.data || []).filter(
+    (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
+  );
 
   // Auto-selecionar a primeira conta quando carrega
   useEffect(() => {

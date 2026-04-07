@@ -23,7 +23,9 @@ export default function CampanhasPage() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
   const { data: accountsData } = useAccounts();
-  const accounts = accountsData?.data || [];
+  const accounts = (accountsData?.data || []).filter(
+    (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
+  );
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
 
   const { data: campaignsData, loading: campLoading } = useCampaigns(

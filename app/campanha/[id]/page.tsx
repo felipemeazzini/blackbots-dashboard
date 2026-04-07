@@ -36,7 +36,9 @@ export default function CampanhaDetailPage({
   } = useAppContext();
 
   const { data: accountsData } = useAccounts();
-  const accounts = accountsData?.data || [];
+  const accounts = (accountsData?.data || []).filter(
+    (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
+  );
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
 
   // Buscar TODAS as campanhas do account com breakdown diario
