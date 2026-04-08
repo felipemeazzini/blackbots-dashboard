@@ -142,14 +142,17 @@ export async function exportDashboardPdf(data: PdfExportData) {
   // KPIs
   const afterKpis = drawKpiGrid(pdf, data, 28);
 
+  // Filter campaigns with spend > 0
+  const activeCampaigns = data.campaignRows.filter((r) => r.metrics.spend > 0);
+
   // Campaigns title
   pdf.setTextColor(...TEXT_SECONDARY);
   pdf.setFontSize(10);
   pdf.setFont("helvetica", "bold");
-  pdf.text(`Campanhas (${data.campaignRows.length})`, 10, afterKpis + 2);
+  pdf.text(`Campanhas com gasto (${activeCampaigns.length})`, 10, afterKpis + 2);
 
   // Campaigns table
-  const campBody = data.campaignRows.map((r) => [
+  const campBody = activeCampaigns.map((r) => [
     r.name.length > 45 ? r.name.substring(0, 45) + "..." : r.name,
     r.status === "ACTIVE" ? "Ativo" : "Pausado",
     formatMetric(r.metrics.spend, "currency"),
