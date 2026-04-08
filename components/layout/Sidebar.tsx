@@ -24,14 +24,15 @@ export default function Sidebar() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then((result) => {
-      const email = result.data?.user?.email;
-      if (email) {
-        setUserEmail(email);
-        setIsAdmin(email === ADMIN_EMAIL);
+    async function loadUser() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email) {
+        setUserEmail(user.email);
+        setIsAdmin(user.email === ADMIN_EMAIL);
       }
-    });
+    }
+    loadUser();
   }, []);
 
   const handleLogout = async () => {
