@@ -12,41 +12,49 @@ export default function LoginPage() {
   const [isInvite, setIsInvite] = useState(false);
   const router = useRouter();
 
-  // Check if user arrived via invite link (has hash params from Supabase)
+  // Check if user arrived via invite link
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash && (hash.includes("access_token") || hash.includes("type=invite"))) {
-      // Supabase puts tokens in the hash fragment for invite links
-      const supabase = createClient();
-      setIsInvite(true);
-      // Give Supabase client time to pick up the hash tokens
-      const checkSession = async () => {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          window.location.href = "/auth/set-password";
-        }
-      };
-      checkSession();
-      setTimeout(checkSession, 1500);
-      setTimeout(checkSession, 3000);
-    }
-
-    // Check for token_hash in query params
     const params = new URLSearchParams(window.location.search);
     const tokenHash = params.get("token_hash");
     const type = params.get("type");
+    const hasHashTokens = hash && (hash.includes("access_token") || hash.includes("type=invite") || hash.includes("type=recovery"));
+
+    if (!hasHashTokens && !tokenHash) return;
+
+    setIsInvite(true);
+    const supabase = createClient();
+
+    // Listen for auth state changes — most reliable way to detect session from hash
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION")) {
+        subscription.unsubscribe();
+        window.location.href = "/auth/set-password";
+      }
+    });
+
+    // Also handle token_hash in query params
     if (tokenHash && type) {
-      setIsInvite(true);
-      const supabase = createClient();
       supabase.auth.verifyOtp({ token_hash: tokenHash, type: type as "invite" }).then(({ error: err }: { error: Error | null }) => {
-        if (!err) {
-          window.location.href = "/auth/set-password";
-        } else {
+        if (err) {
           setError("Link expirado ou invalido. Solicite um novo convite.");
           setIsInvite(false);
+          subscription.unsubscribe();
         }
       });
     }
+
+    // Fallback timeout
+    const timeout = setTimeout(() => {
+      setError("Nao foi possivel processar o convite. Tente novamente.");
+      setIsInvite(false);
+      subscription.unsubscribe();
+    }, 10000);
+
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
