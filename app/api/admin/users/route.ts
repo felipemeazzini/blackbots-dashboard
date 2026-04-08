@@ -1,26 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
-import { createAuthServerClient } from "@/lib/supabase-auth-server";
+import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "felipe@blackbots.com.br";
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-async function isAdmin(): Promise<boolean> {
-  try {
-    const supabase = await createAuthServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    return user?.email === ADMIN_EMAIL;
-  } catch {
-    return false;
-  }
+async function getRequestUser(req: NextRequest) {
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll();
+      },
+      setAll() {},
+    },
+  });
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
 }
 
-export async function GET() {
-  if (!(await isAdmin())) {
+function getAdminClient() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+}
+
+export async function GET(req: NextRequest) {
+  const user = await getRequestUser(req);
+  if (!user || user.email !== ADMIN_EMAIL) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = getAdminClient();
     const { data, error } = await supabase.auth.admin.listUsers();
     if (error) throw error;
 
@@ -40,7 +51,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const user = await getRequestUser(req);
+  if (!user || user.email !== ADMIN_EMAIL) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -50,9 +62,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "email is required" }, { status: 400 });
     }
 
-    const supabase = createServerClient();
+    const supabase = getAdminClient();
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL ? "https://blackbots-dashboard.vercel.app" : "http://localhost:3001"}/auth/callback`,
+      redirectTo: "https://blackbots-dashboard.vercel.app/auth/callback",
     });
 
     if (error) throw error;
@@ -64,7 +76,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const user = await getRequestUser(req);
+  if (!user || user.email !== ADMIN_EMAIL) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -76,7 +89,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = getAdminClient();
     const { error } = await supabase.auth.admin.deleteUser(userId);
     if (error) throw error;
     return NextResponse.json({ success: true });
