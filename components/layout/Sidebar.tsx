@@ -25,10 +25,10 @@ export default function Sidebar() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.email) {
-        setUserEmail(user.email);
-        setIsAdmin(user.email === ADMIN_EMAIL);
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.email) {
+        setUserEmail(data.user.email);
+        setIsAdmin(data.user.email === ADMIN_EMAIL);
       }
     });
   }, []);
