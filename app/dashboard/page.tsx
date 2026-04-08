@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect } from "react";
 import { useAccounts, useInsights, useCampaigns } from "@/hooks/useFacebookData";
 import { useThumbnails } from "@/hooks/useThumbnails";
 import { useAppContext } from "@/contexts/AppContext";
@@ -15,6 +15,7 @@ import SpendAreaChart from "@/components/charts/AreaChart";
 import { KpiSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import BudgetTracker from "@/components/dashboard/BudgetTracker";
 import ExportButton from "@/components/dashboard/ExportButton";
+import { PdfExportData } from "@/lib/export-pdf";
 
 export default function DashboardPage() {
   const {
@@ -192,10 +193,23 @@ export default function DashboardPage() {
     return (monthData.data as ProcessedMetrics[]).reduce((sum, d) => sum + d.spend, 0);
   }, [monthData]);
 
-  const contentRef = useRef<HTMLDivElement>(null);
   const isLoading = accountsLoading || dailyLoading;
-
   const accountName = accounts.find((a) => a.id === activeAccount)?.name || "";
+
+  // PDF export data
+  const pdfData: PdfExportData | null = useMemo(() => {
+    if (isLoading || !metrics.spend) return null;
+    return {
+      accountName,
+      dateRangeLabel: dateRange.customSince && dateRange.customUntil
+        ? `${new Date(dateRange.customSince).toLocaleDateString("pt-BR")} a ${new Date(dateRange.customUntil).toLocaleDateString("pt-BR")}`
+        : dateRange.preset,
+      metrics,
+      previousMetrics,
+      campaignRows: campaignRows.map((r) => ({ name: r.name, status: r.status, metrics: r.metrics })),
+      adRows: adRows.map((r) => ({ name: r.name, metrics: r.metrics })),
+    };
+  }, [isLoading, accountName, dateRange, metrics, previousMetrics, campaignRows, adRows]);
 
   return (
     <div>
@@ -210,11 +224,11 @@ export default function DashboardPage() {
         onCustomChange={setCustomRange}
         autoRefreshInterval={autoRefreshInterval}
         onAutoRefreshChange={setAutoRefreshInterval}
-        actions={<ExportButton contentRef={contentRef} title={accountName} subtitle={dateRange.customSince && dateRange.customUntil ? `${dateRange.customSince} a ${dateRange.customUntil}` : dateRange.preset} />}
+        actions={<ExportButton data={pdfData} />}
         title="Dashboard"
       />
 
-      <div ref={contentRef} className="p-6 space-y-6">
+      <div className="p-6 space-y-6">
         {/* Budget Tracker */}
         <BudgetTracker accountId={activeAccount} currentSpend={monthSpend} />
 

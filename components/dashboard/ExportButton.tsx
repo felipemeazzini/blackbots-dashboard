@@ -1,23 +1,22 @@
 "use client";
 
-import { useState, RefObject } from "react";
+import { useState } from "react";
+import { PdfExportData } from "@/lib/export-pdf";
 import { FileDown, Loader2 } from "lucide-react";
 
 interface ExportButtonProps {
-  contentRef: RefObject<HTMLDivElement | null>;
-  title: string;
-  subtitle: string;
+  data: PdfExportData | null;
 }
 
-export default function ExportButton({ contentRef, title, subtitle }: ExportButtonProps) {
+export default function ExportButton({ data }: ExportButtonProps) {
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {
-    if (!contentRef.current || exporting) return;
+    if (!data || exporting) return;
     setExporting(true);
     try {
       const { exportDashboardPdf } = await import("@/lib/export-pdf");
-      await exportDashboardPdf(contentRef.current, title, subtitle);
+      await exportDashboardPdf(data);
     } catch (err) {
       console.error("Export failed:", err);
     } finally {
@@ -28,7 +27,7 @@ export default function ExportButton({ contentRef, title, subtitle }: ExportButt
   return (
     <button
       onClick={handleExport}
-      disabled={exporting}
+      disabled={exporting || !data}
       className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-surface border border-border rounded-lg text-xs text-text-secondary hover:text-text-primary hover:border-accent transition-colors disabled:opacity-50"
       title="Exportar como PDF"
     >
