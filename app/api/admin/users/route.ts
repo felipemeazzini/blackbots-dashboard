@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "felipe@blackbots.com.br";
+const ADMIN_EMAILS = ["felipe@blackbots.com.br", "felipe.meazzini@gmail.com"];
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -12,7 +12,7 @@ function getAdminClient() {
 // Verify admin by checking the auth token from the Authorization header
 async function verifyAdmin(req: NextRequest): Promise<boolean> {
   const authHeader = req.headers.get("x-user-email");
-  return authHeader === ADMIN_EMAIL;
+  return !!authHeader && ADMIN_EMAILS.includes(authHeader);
 }
 
 export async function GET(req: NextRequest) {

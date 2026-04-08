@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
 import { LayoutDashboard, Megaphone, Target, Globe, Trophy, ArrowLeftRight, Users, LogOut } from "lucide-react";
 
-const ADMIN_EMAIL = "felipe@blackbots.com.br";
+const ADMIN_EMAILS = ["felipe@blackbots.com.br", "felipe.meazzini@gmail.com"];
 
 const NAV_ITEMS = [
   { href: "/geral", label: "Visao Geral", icon: Globe },
@@ -29,7 +29,7 @@ export default function Sidebar() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email) {
         setUserEmail(user.email);
-        setIsAdmin(user.email === ADMIN_EMAIL);
+        setIsAdmin(ADMIN_EMAILS.includes(user.email));
       }
     }
     loadUser();
