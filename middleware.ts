@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createSupabaseMiddlewareClient } from "@/lib/supabase-middleware";
 
-export function middleware(request: NextRequest) {
-  // Se DASHBOARD_PASSWORD não está configurada, acesso livre
-  // Se está configurada, exige autenticação
-  const passwordRequired = process.env.DASHBOARD_PASSWORD;
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/set-password"];
 
-  if (!passwordRequired) {
-    return NextResponse.next();
-  }
-
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) {
-    return NextResponse.next();
+  // Allow public paths
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    const { response } = createSupabaseMiddlewareClient(request);
+    return response;
   }
 
+  // Allow static assets
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -24,12 +22,20 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const auth = request.cookies.get("bb_auth");
-  if (!auth || auth.value !== "authenticated") {
+  // Allow API routes for Facebook data (they use server-side token, not user auth)
+  if (pathname.startsWith("/api/facebook") || pathname.startsWith("/api/goals") || pathname.startsWith("/api/budgets")) {
+    return NextResponse.next();
+  }
+
+  // Check Supabase session
+  const { supabase, response } = createSupabaseMiddlewareClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
