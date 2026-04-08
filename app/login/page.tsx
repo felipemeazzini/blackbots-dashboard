@@ -18,22 +18,17 @@ export default function LoginPage() {
     if (hash && (hash.includes("access_token") || hash.includes("type=invite"))) {
       // Supabase puts tokens in the hash fragment for invite links
       const supabase = createClient();
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          window.location.href = "/auth/set-password";
-        }
-      });
-
-      // Also try to exchange if it's in the hash
       setIsInvite(true);
       // Give Supabase client time to pick up the hash tokens
-      setTimeout(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session) {
-            window.location.href = "/auth/set-password";
-          }
-        });
-      }, 1500);
+      const checkSession = async () => {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          window.location.href = "/auth/set-password";
+        }
+      };
+      checkSession();
+      setTimeout(checkSession, 1500);
+      setTimeout(checkSession, 3000);
     }
 
     // Check for token_hash in query params
@@ -43,7 +38,7 @@ export default function LoginPage() {
     if (tokenHash && type) {
       setIsInvite(true);
       const supabase = createClient();
-      supabase.auth.verifyOtp({ token_hash: tokenHash, type: type as "invite" }).then(({ error: err }) => {
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type: type as "invite" }).then(({ error: err }: { error: Error | null }) => {
         if (!err) {
           window.location.href = "/auth/set-password";
         } else {
