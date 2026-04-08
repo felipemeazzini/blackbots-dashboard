@@ -26,7 +26,7 @@ export default function LoginPage() {
     const supabase = createClient();
 
     // Listen for auth state changes — most reliable way to detect session from hash
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: unknown) => {
       if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION")) {
         subscription.unsubscribe();
         window.location.href = "/auth/set-password";
