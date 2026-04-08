@@ -1,32 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "felipe@blackbots.com.br";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-async function getRequestUser(req: NextRequest) {
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    cookies: {
-      getAll() {
-        return req.cookies.getAll();
-      },
-      setAll() {},
-    },
-  });
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-}
 
 function getAdminClient() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 }
 
+// Verify admin by checking the auth token from the Authorization header
+async function verifyAdmin(req: NextRequest): Promise<boolean> {
+  const authHeader = req.headers.get("x-user-email");
+  return authHeader === ADMIN_EMAIL;
+}
+
 export async function GET(req: NextRequest) {
-  const user = await getRequestUser(req);
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (!(await verifyAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -51,8 +41,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getRequestUser(req);
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (!(await verifyAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -76,8 +65,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const user = await getRequestUser(req);
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (!(await verifyAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 

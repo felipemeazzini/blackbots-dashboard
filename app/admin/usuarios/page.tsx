@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@/lib/supabase";
 import { UserPlus, Trash2, Shield, Mail } from "lucide-react";
 
 interface User {
@@ -19,9 +20,23 @@ export default function UsuariosPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    async function loadEmail() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email) setUserEmail(user.email);
+    }
+    loadEmail();
+  }, []);
+
+  const authHeaders = { "x-user-email": userEmail };
+
   const fetchUsers = useCallback(async () => {
+    if (!userEmail) return;
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { headers: authHeaders });
       if (res.status === 403) {
         setError("Acesso negado. Apenas administradores.");
         return;
@@ -35,11 +50,11 @@ export default function UsuariosPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    if (userEmail) fetchUsers();
+  }, [userEmail, fetchUsers]);
 
   const handleInvite = async () => {
     if (!inviteEmail) return;
@@ -50,7 +65,7 @@ export default function UsuariosPage() {
     try {
       const res = await fetch("/api/admin/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ email: inviteEmail }),
       });
 
@@ -73,7 +88,7 @@ export default function UsuariosPage() {
     if (!confirm(`Revogar acesso de ${userEmail}?`)) return;
 
     try {
-      const res = await fetch(`/api/admin/users?id=${userId}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/users?id=${userId}`, { method: "DELETE", headers: authHeaders });
       if (res.ok) {
         await fetchUsers();
         setMessage(`Acesso de ${userEmail} revogado`);
