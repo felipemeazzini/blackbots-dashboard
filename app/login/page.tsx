@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -17,17 +17,26 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
 
-      if (error) {
-        setError("Email ou senha incorretos");
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) {
+        console.error("Auth error:", authError);
+        setError(authError.message || "Email ou senha incorretos");
       } else {
         router.push("/dashboard");
         router.refresh();
       }
-    } catch {
-      setError("Erro ao conectar");
+    } catch (err) {
+      console.error("Login catch:", err);
+      setError("Erro ao conectar: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
     }
