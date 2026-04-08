@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
@@ -9,7 +9,50 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isInvite, setIsInvite] = useState(false);
   const router = useRouter();
+
+  // Check if user arrived via invite link (has hash params from Supabase)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && (hash.includes("access_token") || hash.includes("type=invite"))) {
+      // Supabase puts tokens in the hash fragment for invite links
+      const supabase = createClient();
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          window.location.href = "/auth/set-password";
+        }
+      });
+
+      // Also try to exchange if it's in the hash
+      setIsInvite(true);
+      // Give Supabase client time to pick up the hash tokens
+      setTimeout(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            window.location.href = "/auth/set-password";
+          }
+        });
+      }, 1500);
+    }
+
+    // Check for token_hash in query params
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get("token_hash");
+    const type = params.get("type");
+    if (tokenHash && type) {
+      setIsInvite(true);
+      const supabase = createClient();
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type: type as "invite" }).then(({ error: err }) => {
+        if (!err) {
+          window.location.href = "/auth/set-password";
+        } else {
+          setError("Link expirado ou invalido. Solicite um novo convite.");
+          setIsInvite(false);
+        }
+      });
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,18 +67,29 @@ export default function LoginPage() {
       });
 
       if (authError) {
-        console.error("Auth error:", authError);
         setError(authError.message || "Email ou senha incorretos");
       } else {
         window.location.href = "/dashboard";
       }
-    } catch (err) {
-      console.error("Login catch:", err);
+    } catch {
       setError("Erro ao conectar");
     } finally {
       setLoading(false);
     }
   };
+
+  if (isInvite) {
+    return (
+      <div className="min-h-screen bg-[#1A1A1A] flex items-center justify-center">
+        <div className="bg-[#242424] border border-[#3A3A3A] rounded-2xl p-8 w-full max-w-sm text-center">
+          <h1 className="text-2xl font-bold text-[#F5F5F5] mb-2">
+            <span className="text-[#F5A623]">Black</span>Bots
+          </h1>
+          <p className="text-sm text-[#707070]">Processando convite...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#1A1A1A] flex items-center justify-center">
