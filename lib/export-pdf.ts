@@ -20,28 +20,22 @@ export interface PdfExportData {
 }
 
 // Colors
-const BG_PRIMARY: [number, number, number] = [26, 26, 26];
-const BG_SURFACE: [number, number, number] = [36, 36, 36];
-const BG_ALT: [number, number, number] = [30, 30, 30];
-const BORDER: [number, number, number] = [58, 58, 58];
-const TEXT_PRIMARY: [number, number, number] = [245, 245, 245];
-const TEXT_SECONDARY: [number, number, number] = [176, 176, 176];
-const TEXT_MUTED: [number, number, number] = [112, 112, 112];
-const ACCENT: [number, number, number] = [245, 166, 35];
-const GREEN: [number, number, number] = [34, 197, 94];
-const RED: [number, number, number] = [239, 68, 68];
+// Light theme for PDF (compatible with all viewers + print friendly)
+const BG_PRIMARY: [number, number, number] = [255, 255, 255];
+const BG_SURFACE: [number, number, number] = [245, 245, 245];
+const BG_ALT: [number, number, number] = [250, 250, 250];
+const BORDER: [number, number, number] = [220, 220, 220];
+const TEXT_PRIMARY: [number, number, number] = [30, 30, 30];
+const TEXT_SECONDARY: [number, number, number] = [80, 80, 80];
+const TEXT_MUTED: [number, number, number] = [140, 140, 140];
+const ACCENT: [number, number, number] = [220, 140, 20];
+const GREEN: [number, number, number] = [22, 163, 74];
+const RED: [number, number, number] = [220, 38, 38];
 
 const KPI_KEYS: Array<keyof ProcessedMetrics> = [
   "spend", "impressions", "reach", "clicks", "ctr", "cpc",
   "cpm", "conversions", "purchases", "costPerSale", "roas", "purchaseValue",
 ];
-
-function drawPageBackground(pdf: jsPDF) {
-  const w = pdf.internal.pageSize.getWidth();
-  const h = pdf.internal.pageSize.getHeight();
-  pdf.setFillColor(...BG_PRIMARY);
-  pdf.rect(0, 0, w, h, "F");
-}
 
 function drawFooter(pdf: jsPDF, pageNum: number) {
   const w = pdf.internal.pageSize.getWidth();
@@ -55,28 +49,24 @@ function drawFooter(pdf: jsPDF, pageNum: number) {
 function drawHeader(pdf: jsPDF, data: PdfExportData) {
   const w = pdf.internal.pageSize.getWidth();
 
-  // Header bar
-  pdf.setFillColor(...BG_SURFACE);
+  // Header bar (orange)
+  pdf.setFillColor(...ACCENT);
   pdf.rect(0, 0, w, 22, "F");
 
-  // Orange accent line
-  pdf.setFillColor(...ACCENT);
-  pdf.rect(0, 22, w, 0.8, "F");
-
-  // Brand
-  pdf.setTextColor(...ACCENT);
+  // Brand (white on orange)
+  pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(16);
   pdf.setFont("helvetica", "bold");
   pdf.text("BlackBots", 10, 14);
 
   // Subtitle
-  pdf.setTextColor(...TEXT_PRIMARY);
+  pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(11);
   pdf.setFont("helvetica", "normal");
   pdf.text("Relatorio de Marketing", 52, 14);
 
   // Right side info
-  pdf.setTextColor(...TEXT_SECONDARY);
+  pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(9);
   pdf.text(`${data.accountName}  |  ${data.dateRangeLabel}`, w - 10, 10, { align: "right" });
   pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, w - 10, 16, { align: "right" });
@@ -136,7 +126,7 @@ export async function exportDashboardPdf(data: PdfExportData) {
   let pageNum = 1;
 
   // Page 1
-  drawPageBackground(pdf);
+
   drawHeader(pdf, data);
 
   // KPIs
@@ -223,7 +213,7 @@ export async function exportDashboardPdf(data: PdfExportData) {
     },
     didDrawPage: () => {
       pageNum++;
-      drawPageBackground(pdf);
+    
       drawFooter(pdf, pageNum - 1);
     },
   });
@@ -235,7 +225,7 @@ export async function exportDashboardPdf(data: PdfExportData) {
 
     if (adsY > 180) {
       pdf.addPage();
-      drawPageBackground(pdf);
+    
       pageNum++;
       adsY = 15;
     }
@@ -287,7 +277,7 @@ export async function exportDashboardPdf(data: PdfExportData) {
       },
       didDrawPage: () => {
         pageNum++;
-        drawPageBackground(pdf);
+      
         drawFooter(pdf, pageNum - 1);
       },
     });
