@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createSupabaseMiddlewareClient } from "@/lib/supabase-middleware";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/set-password"];
+const PUBLIC_PATHS = ["/login", "/auth"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,16 +14,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // Allow static assets
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.includes(".")
-  ) {
+  if (pathname.startsWith("/_next") || pathname.startsWith("/favicon") || pathname.includes(".")) {
     return NextResponse.next();
   }
 
-  // Allow API routes for Facebook data (they use server-side token, not user auth)
-  if (pathname.startsWith("/api/facebook") || pathname.startsWith("/api/goals") || pathname.startsWith("/api/budgets")) {
+  // Allow data API routes
+  if (pathname.startsWith("/api/facebook") || pathname.startsWith("/api/goals") || pathname.startsWith("/api/budgets") || pathname.startsWith("/api/user-access")) {
     return NextResponse.next();
   }
 

@@ -2,25 +2,30 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
-import { UserPlus, Trash2, Shield, Mail } from "lucide-react";
+import { useAccounts } from "@/hooks/useFacebookData";
+import { Shield, Check, X, Trash2 } from "lucide-react";
 
-interface User {
+interface UserAccess {
   id: string;
+  user_id: string;
   email: string;
+  status: string;
+  allowed_accounts: string[] | null;
+  is_admin: boolean;
   created_at: string;
-  last_sign_in_at: string | null;
-  confirmed_at: string | null;
 }
 
 export default function UsuariosPage() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserAccess[]>([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const [userEmail, setUserEmail] = useState("");
+  const { data: accountsData } = useAccounts();
+  const allAccounts = (accountsData?.data || []).filter(
+    (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
+  );
 
   useEffect(() => {
     async function loadEmail() {
@@ -50,52 +55,52 @@ export default function UsuariosPage() {
     } finally {
       setLoading(false);
     }
-  }, [userEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userEmail]);
 
   useEffect(() => {
     if (userEmail) fetchUsers();
   }, [userEmail, fetchUsers]);
 
-  const handleInvite = async () => {
-    if (!inviteEmail) return;
-    setInviting(true);
+  const updateUser = async (id: string, updates: Record<string, unknown>) => {
     setMessage("");
-    setError("");
-
-    try {
-      const res = await fetch("/api/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ email: inviteEmail }),
-      });
-
-      if (res.ok) {
-        setMessage(`Convite enviado para ${inviteEmail}`);
-        setInviteEmail("");
-        await fetchUsers();
-      } else {
-        const json = await res.json();
-        setError(json.error || "Erro ao enviar convite");
-      }
-    } catch {
-      setError("Erro ao enviar convite");
-    } finally {
-      setInviting(false);
+    const res = await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({ id, ...updates }),
+    });
+    if (res.ok) {
+      await fetchUsers();
+      setMessage("Usuario atualizado");
     }
   };
 
-  const handleDelete = async (userId: string, userEmail: string) => {
-    if (!confirm(`Revogar acesso de ${userEmail}?`)) return;
+  const deleteUser = async (id: string, userId: string, email: string) => {
+    if (!confirm(`Remover ${email} completamente?`)) return;
+    await fetch(`/api/admin/users?id=${id}&user_id=${userId}`, {
+      method: "DELETE",
+      headers: authHeaders,
+    });
+    await fetchUsers();
+    setMessage(`${email} removido`);
+  };
 
-    try {
-      const res = await fetch(`/api/admin/users?id=${userId}`, { method: "DELETE", headers: authHeaders });
-      if (res.ok) {
-        await fetchUsers();
-        setMessage(`Acesso de ${userEmail} revogado`);
-      }
-    } catch {
-      setError("Erro ao revogar acesso");
-    }
+  const toggleAccount = (user: UserAccess, accountId: string) => {
+    const current = user.allowed_accounts || [];
+    const updated = current.includes(accountId)
+      ? current.filter((a) => a !== accountId)
+      : [...current, accountId];
+    updateUser(user.id, { allowed_accounts: updated.length > 0 ? updated : null });
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-yellow/10 text-yellow",
+    approved: "bg-green/10 text-green",
+    denied: "bg-red/10 text-red",
+  };
+  const statusLabels: Record<string, string> = {
+    pending: "Pendente",
+    approved: "Aprovado",
+    denied: "Negado",
   };
 
   return (
@@ -107,105 +112,96 @@ export default function UsuariosPage() {
         </div>
       </header>
 
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-4">
         {error && (
-          <div className="bg-red/10 border border-red/30 rounded-lg px-4 py-3 text-sm text-red">
-            {error}
-          </div>
+          <div className="bg-red/10 border border-red/30 rounded-lg px-4 py-3 text-sm text-red">{error}</div>
         )}
         {message && (
-          <div className="bg-green/10 border border-green/30 rounded-lg px-4 py-3 text-sm text-green">
-            {message}
-          </div>
+          <div className="bg-green/10 border border-green/30 rounded-lg px-4 py-3 text-sm text-green">{message}</div>
         )}
 
-        {/* Convidar */}
-        <div className="bg-bg-surface border border-border rounded-xl p-5">
-          <h3 className="text-sm font-medium text-text-primary mb-3 flex items-center gap-2">
-            <Mail size={14} />
-            Convidar usuario
-          </h3>
-          <div className="flex items-center gap-3">
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="email@exemplo.com"
-              className="bg-bg-primary border border-border rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent w-72 placeholder:text-text-muted"
-            />
-            <button
-              onClick={handleInvite}
-              disabled={inviting || !inviteEmail}
-              className="flex items-center gap-2 px-4 py-2 bg-accent text-[#1A1A1A] rounded-lg text-sm font-bold hover:bg-accent/80 transition-colors disabled:opacity-50"
-            >
-              <UserPlus size={14} />
-              {inviting ? "Enviando..." : "Enviar Convite"}
-            </button>
-          </div>
-          <p className="text-xs text-text-muted mt-2">
-            O usuario recebera um email com link para definir a senha
-          </p>
-        </div>
-
-        {/* Lista de usuarios */}
-        <div className="bg-bg-surface border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 text-xs text-text-muted font-medium uppercase">Email</th>
-                <th className="text-center px-4 py-3 text-xs text-text-muted font-medium uppercase">Status</th>
-                <th className="text-left px-4 py-3 text-xs text-text-muted font-medium uppercase">Criado em</th>
-                <th className="text-left px-4 py-3 text-xs text-text-muted font-medium uppercase">Ultimo login</th>
-                <th className="text-right px-4 py-3 text-xs text-text-muted font-medium uppercase w-16"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-b border-border/50 hover:bg-bg-hover">
-                  <td className="px-4 py-3 text-text-primary font-medium">{u.email}</td>
-                  <td className="text-center px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                      u.confirmed_at ? "bg-green/10 text-green" : "bg-yellow/10 text-yellow"
-                    }`}>
-                      {u.confirmed_at ? "Ativo" : "Pendente"}
+        {loading ? (
+          <p className="text-text-muted text-sm">Carregando...</p>
+        ) : (
+          <div className="space-y-4">
+            {users.map((u) => (
+              <div key={u.id} className="bg-bg-surface border border-border rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-text-primary font-medium">{u.email}</p>
+                    <p className="text-xs text-text-muted">
+                      Cadastro: {new Date(u.created_at).toLocaleDateString("pt-BR")}
+                      {u.is_admin && <span className="ml-2 text-accent font-medium">Admin</span>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[u.status] || ""}`}>
+                      {statusLabels[u.status] || u.status}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-text-muted text-xs">
-                    {new Date(u.created_at).toLocaleDateString("pt-BR")}
-                  </td>
-                  <td className="px-4 py-3 text-text-muted text-xs">
-                    {u.last_sign_in_at
-                      ? new Date(u.last_sign_in_at).toLocaleDateString("pt-BR")
-                      : "Nunca"}
-                  </td>
-                  <td className="text-right px-4 py-3">
+                  </div>
+                </div>
+
+                {/* Acoes */}
+                <div className="flex items-center gap-2 mb-3">
+                  {u.status !== "approved" && (
                     <button
-                      onClick={() => handleDelete(u.id, u.email || "")}
-                      className="text-red/60 hover:text-red transition-colors"
-                      title="Revogar acesso"
+                      onClick={() => updateUser(u.id, { status: "approved" })}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs font-medium hover:bg-green/20 transition-colors"
                     >
-                      <Trash2 size={14} />
+                      <Check size={12} /> Aprovar
                     </button>
-                  </td>
-                </tr>
-              ))}
-              {!loading && users.length === 0 && !error && (
-                <tr>
-                  <td colSpan={5} className="text-center py-8 text-text-muted">
-                    Nenhum usuario cadastrado
-                  </td>
-                </tr>
-              )}
-              {loading && (
-                <tr>
-                  <td colSpan={5} className="text-center py-8 text-text-muted">
-                    Carregando...
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                  {u.status !== "denied" && !u.is_admin && (
+                    <button
+                      onClick={() => updateUser(u.id, { status: "denied" })}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs font-medium hover:bg-red/20 transition-colors"
+                    >
+                      <X size={12} /> Negar
+                    </button>
+                  )}
+                  {!u.is_admin && (
+                    <button
+                      onClick={() => deleteUser(u.id, u.user_id, u.email)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-bg-hover text-text-muted rounded-lg text-xs hover:text-red transition-colors"
+                    >
+                      <Trash2 size={12} /> Remover
+                    </button>
+                  )}
+                </div>
+
+                {/* Contas de anuncio permitidas */}
+                {u.status === "approved" && (
+                  <div>
+                    <p className="text-xs text-text-muted mb-2">
+                      Contas de anuncio permitidas {!u.allowed_accounts ? "(todas)" : `(${u.allowed_accounts.length})`}:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {allAccounts.map((acc) => {
+                        const isAllowed = !u.allowed_accounts || u.allowed_accounts.includes(acc.id);
+                        return (
+                          <button
+                            key={acc.id}
+                            onClick={() => toggleAccount(u, acc.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                              isAllowed
+                                ? "bg-accent/15 text-accent border-accent/30"
+                                : "bg-bg-hover text-text-muted border-border hover:border-accent/30"
+                            }`}
+                          >
+                            {acc.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-text-muted mt-1">
+                      {u.is_admin ? "Admins veem todas as contas" : "Clique para ativar/desativar acesso a cada conta"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

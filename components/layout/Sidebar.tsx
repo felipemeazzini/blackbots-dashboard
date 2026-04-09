@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
 import { LayoutDashboard, Megaphone, Target, Globe, Trophy, ArrowLeftRight, Users, LogOut } from "lucide-react";
-
-const ADMIN_EMAILS = ["felipe@blackbots.com.br", "felipe.meazzini@gmail.com"];
 
 const NAV_ITEMS = [
   { href: "/geral", label: "Visao Geral", icon: Globe },
@@ -19,7 +17,6 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [userEmail, setUserEmail] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -29,7 +26,12 @@ export default function Sidebar() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email) {
         setUserEmail(user.email);
-        setIsAdmin(ADMIN_EMAILS.includes(user.email));
+        // Check admin status
+        const res = await fetch("/api/user-access", {
+          headers: { "x-user-id": user.id },
+        });
+        const json = await res.json();
+        if (json.data?.is_admin) setIsAdmin(true);
       }
     }
     loadUser();
@@ -38,8 +40,7 @@ export default function Sidebar() {
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    window.location.href = "/login";
   };
 
   return (
@@ -90,7 +91,6 @@ export default function Sidebar() {
         )}
       </nav>
 
-      {/* User info + logout */}
       <div className="px-3 py-3 border-t border-border">
         {userEmail && (
           <p className="text-[10px] text-text-muted truncate px-3 mb-2" title={userEmail}>
