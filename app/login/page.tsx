@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -55,6 +56,16 @@ export default function LoginPage() {
       const supabase = createClient();
 
       if (mode === "signup") {
+        if (password !== confirmPassword) {
+          setError("As senhas nao coincidem");
+          setLoading(false);
+          return;
+        }
+        if (password.length < 6) {
+          setError("Senha deve ter no minimo 6 caracteres");
+          setLoading(false);
+          return;
+        }
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -187,11 +198,24 @@ export default function LoginPage() {
             />
           </div>
 
+          {mode === "signup" && (
+            <div>
+              <label className="block text-xs text-[#707070] mb-1.5">Confirmar Senha</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repita a senha"
+                className="w-full bg-[#1A1A1A] border border-[#3A3A3A] rounded-lg px-4 py-2.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F5A623] placeholder:text-[#707070]"
+              />
+            </div>
+          )}
+
           {error && <p className="text-sm text-[#EF4444]">{error}</p>}
 
           <button
             type="submit"
-            disabled={loading || !email || !password}
+            disabled={loading || !email || !password || (mode === "signup" && !confirmPassword)}
             className="w-full bg-[#F5A623] text-[#1A1A1A] rounded-lg py-2.5 text-sm font-bold hover:bg-[#F5A623]/80 transition-colors disabled:opacity-50"
           >
             {loading ? "Carregando..." : mode === "login" ? "Entrar" : "Criar Conta"}
