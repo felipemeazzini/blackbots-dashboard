@@ -159,6 +159,18 @@ export default function UsuariosPage() {
                       <X size={12} /> Negar
                     </button>
                   )}
+                  {u.status === "approved" && (
+                    <button
+                      onClick={() => updateUser(u.id, { is_admin: !u.is_admin })}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        u.is_admin
+                          ? "bg-accent/15 text-accent hover:bg-accent/25"
+                          : "bg-bg-hover text-text-muted hover:text-accent"
+                      }`}
+                    >
+                      <Shield size={12} /> {u.is_admin ? "Admin" : "Tornar Admin"}
+                    </button>
+                  )}
                   {!u.is_admin && (
                     <button
                       onClick={() => deleteUser(u.id, u.user_id, u.email)}
