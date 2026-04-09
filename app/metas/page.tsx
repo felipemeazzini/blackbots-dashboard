@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useAccounts, useCampaigns, useInsights } from "@/hooks/useFacebookData";
+import { useCampaigns, useInsights } from "@/hooks/useFacebookData";
+import { useFilteredAccounts } from "@/hooks/useFilteredAccounts";
 import { useAppContext } from "@/contexts/AppContext";
 import { useGoals } from "@/hooks/useGoals";
 import { aggregateMetrics, emptyMetrics, formatMetric } from "@/lib/metrics";
@@ -26,10 +27,7 @@ export default function MetasPage() {
     setAutoRefreshInterval,
   } = useAppContext();
 
-  const { data: accountsData } = useAccounts();
-  const accounts = (accountsData?.data || []).filter(
-    (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
-  );
+  const { accounts } = useFilteredAccounts();
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
 
   const { data: campaignsData } = useCampaigns(activeAccount);

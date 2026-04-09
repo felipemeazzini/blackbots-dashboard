@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useAccounts, useInsights } from "@/hooks/useFacebookData";
+import { useInsights } from "@/hooks/useFacebookData";
+import { useFilteredAccounts } from "@/hooks/useFilteredAccounts";
 import { useThumbnails } from "@/hooks/useThumbnails";
 import { useAppContext } from "@/contexts/AppContext";
 import { aggregateMetrics, emptyMetrics, formatMetric } from "@/lib/metrics";
@@ -27,10 +28,7 @@ export default function RankingPage() {
     setAutoRefreshInterval,
   } = useAppContext();
 
-  const { data: accountsData } = useAccounts();
-  const accounts = (accountsData?.data || []).filter(
-    (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
-  );
+  const { accounts } = useFilteredAccounts();
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
 
   const { data: adInsights, loading } = useInsights(

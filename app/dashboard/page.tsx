@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useEffect } from "react";
-import { useAccounts, useInsights, useCampaigns } from "@/hooks/useFacebookData";
+import { useInsights, useCampaigns } from "@/hooks/useFacebookData";
+import { useFilteredAccounts } from "@/hooks/useFilteredAccounts";
 import { useThumbnails } from "@/hooks/useThumbnails";
 import { useAppContext } from "@/contexts/AppContext";
 import { useGoals } from "@/hooks/useGoals";
@@ -30,10 +31,7 @@ export default function DashboardPage() {
     previousDateQueryString,
   } = useAppContext();
 
-  const { data: accountsData, loading: accountsLoading } = useAccounts();
-  const accounts = (accountsData?.data || []).filter(
-    (a) => Number(a.amount_spent) > 0 && !a.name.includes("Read-Only") && !a.name.includes("Test ")
-  );
+  const { accounts, loading: accountsLoading } = useFilteredAccounts();
 
   // Auto-selecionar a primeira conta quando carrega
   useEffect(() => {

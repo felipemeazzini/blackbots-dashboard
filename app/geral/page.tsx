@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAccounts, useInsights, useCampaigns, useAds } from "@/hooks/useFacebookData";
+import { useInsights, useCampaigns, useAds } from "@/hooks/useFacebookData";
+import { useFilteredAccounts } from "@/hooks/useFilteredAccounts";
 import { useAppContext } from "@/contexts/AppContext";
 import { aggregateMetrics, emptyMetrics, formatMetric } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
@@ -24,13 +25,7 @@ export default function GeralPage() {
     setAutoRefreshInterval,
   } = useAppContext();
 
-  const { data: accountsData, loading: accountsLoading } = useAccounts();
-  const allAccounts = (accountsData?.data || []).filter(
-    (a) =>
-      Number(a.amount_spent) > 0 &&
-      !a.name.includes("Read-Only") &&
-      !a.name.includes("Test ")
-  );
+  const { accounts: allAccounts, loading: accountsLoading } = useFilteredAccounts();
 
   // Insights diarios por conta
   const { data: data0 } = useInsights(allAccounts[0]?.id || null, dateQueryString, undefined, "1", autoRefreshInterval);
