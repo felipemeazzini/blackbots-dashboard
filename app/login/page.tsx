@@ -71,7 +71,11 @@ export default function LoginPage() {
           password,
         });
         if (signUpError) {
-          setError(signUpError.message);
+          if (signUpError.message.includes("already registered")) {
+            setError("Este email ja esta cadastrado. Use 'Entrar' para fazer login.");
+          } else {
+            setError(signUpError.message);
+          }
           return;
         }
         if (data.user) {
