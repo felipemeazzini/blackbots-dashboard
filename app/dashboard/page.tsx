@@ -15,8 +15,10 @@ import MetricsTable from "@/components/dashboard/MetricsTable";
 import SpendAreaChart from "@/components/charts/AreaChart";
 import { KpiSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import BudgetTracker from "@/components/dashboard/BudgetTracker";
+import StripeKpiCards from "@/components/dashboard/StripeKpiCards";
 import ExportButton from "@/components/dashboard/ExportButton";
 import { PdfExportData } from "@/lib/export-pdf";
+import { useStripeData } from "@/hooks/useStripeData";
 
 export default function DashboardPage() {
   const {
@@ -191,6 +193,25 @@ export default function DashboardPage() {
     return (monthData.data as ProcessedMetrics[]).reduce((sum, d) => sum + d.spend, 0);
   }, [monthData]);
 
+  // Stripe data
+  const { data: stripeResponse } = useStripeData(dateQueryString, autoRefreshInterval);
+  const stripeData = stripeResponse?.data;
+
+  // Match Stripe campaigns to Facebook campaigns by name
+  const campaignRowsWithStripe = useMemo(() => {
+    if (!stripeData || !campaignRows.length) return campaignRows;
+    return campaignRows.map((row) => {
+      const stripeMatch = stripeData.byCampaignName.find((s) =>
+        row.name.includes(s.utmCampaign) || s.utmCampaign.includes(row.name) ||
+        row.name.startsWith(s.utmCampaign.substring(0, 30))
+      );
+      return {
+        ...row,
+        stripeData: stripeMatch ? { sales: stripeMatch.sales, revenue: stripeMatch.revenue } : undefined,
+      };
+    });
+  }, [campaignRows, stripeData]);
+
   const isLoading = accountsLoading || dailyLoading;
   const accountName = accounts.find((a) => a.id === activeAccount)?.name || "";
 
@@ -240,6 +261,11 @@ export default function DashboardPage() {
           <KpiGrid metrics={metrics} previousMetrics={previousMetrics} />
         )}
 
+        {/* Stripe KPI Cards */}
+        {stripeData && stripeData.totalSales > 0 && (
+          <StripeKpiCards stripeData={stripeData} adSpend={metrics.spend} />
+        )}
+
         {chartData.length > 0 && (
           <div>
             <h3 className="text-sm font-medium text-text-secondary mb-3">
@@ -269,7 +295,7 @@ export default function DashboardPage() {
             <TableSkeleton />
           ) : (
             <MetricsTable
-              rows={campaignRows}
+              rows={campaignRowsWithStripe}
               onRowClick={(id) =>
                 (window.location.href = `/campanha/${id}`)
               }

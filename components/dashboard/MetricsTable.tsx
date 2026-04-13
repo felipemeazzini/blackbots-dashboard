@@ -15,6 +15,7 @@ interface MetricsTableRow {
   href?: string;
   thumbnailUrl?: string;
   goalStatus?: string | null;
+  stripeData?: { sales: number; revenue: number };
 }
 
 interface MetricsTableProps {
@@ -107,6 +108,16 @@ export default function MetricsTable({
                   </th>
                 );
               })}
+              {rows.some((r) => r.stripeData) && (
+                <>
+                  <th className="text-right px-3 py-3 text-xs text-purple font-medium uppercase tracking-wider whitespace-nowrap">
+                    Stripe
+                  </th>
+                  <th className="text-right px-3 py-3 text-xs text-purple font-medium uppercase tracking-wider whitespace-nowrap">
+                    Receita
+                  </th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -149,6 +160,18 @@ export default function MetricsTable({
                     </td>
                   );
                 })}
+                {rows.some((r) => r.stripeData) && (
+                  <>
+                    <td className="text-right px-3 py-3 tabular-nums font-bold text-purple">
+                      {row.stripeData ? row.stripeData.sales : "—"}
+                    </td>
+                    <td className="text-right px-3 py-3 tabular-nums font-bold text-purple">
+                      {row.stripeData
+                        ? row.stripeData.revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                        : "—"}
+                    </td>
+                  </>
+                )}
               </tr>
             );
             })}
