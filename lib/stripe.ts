@@ -66,26 +66,21 @@ export async function getStripeRetentionData(): Promise<RetentionMetrics> {
   const now = Date.now() / 1000;
   const thirtyDaysAgo = now - 30 * 86400;
 
-  // Fetch subscriptions from last 12 months (avoid timeout)
-  const twelveMonthsAgo = Math.floor((Date.now() - 365 * 86400 * 1000) / 1000);
+  // Fetch recent subscriptions (max 2 pages to stay within Vercel timeout)
   const allSubs: Stripe.Subscription[] = [];
-  let hasMore = true;
   let startingAfter: string | undefined;
 
-  while (hasMore) {
+  for (let page = 0; page < 2; page++) {
     const params: Stripe.SubscriptionListParams = {
       limit: 100,
       status: "all",
-      created: { gte: twelveMonthsAgo },
     };
     if (startingAfter) params.starting_after = startingAfter;
 
     const batch = await stripe.subscriptions.list(params);
     allSubs.push(...batch.data);
-    hasMore = batch.has_more;
-    if (batch.data.length > 0) {
-      startingAfter = batch.data[batch.data.length - 1].id;
-    }
+    if (!batch.has_more || batch.data.length === 0) break;
+    startingAfter = batch.data[batch.data.length - 1].id;
   }
 
   // Process each subscription
