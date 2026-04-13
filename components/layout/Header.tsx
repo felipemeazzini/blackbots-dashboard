@@ -81,6 +81,7 @@ export default function Header({
               onChange={(e) => onAccountChange(e.target.value)}
               className="bg-bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent max-w-[280px]"
             >
+              <option value="all">Todas as contas</option>
               {accounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
                   {acc.name}
