@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripeSubscriptions } from "@/lib/stripe";
+import { StripeMetrics } from "@/types/stripe";
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
+
+// In-memory cache with 5 min TTL
+const cache = new Map<string, { data: StripeMetrics; ts: number }>();
+const CACHE_TTL = 5 * 60 * 1000;
 
 function resolvePresetToDates(preset: string): { since: string; until: string } {
   const today = new Date();
@@ -48,8 +53,15 @@ export async function GET(req: NextRequest) {
     until = resolved.until;
   }
 
+  const cacheKey = `${since}_${until}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    return NextResponse.json({ data: cached.data });
+  }
+
   try {
     const data = await getStripeSubscriptions(since, until);
+    cache.set(cacheKey, { data, ts: Date.now() });
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
