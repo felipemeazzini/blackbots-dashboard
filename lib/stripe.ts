@@ -21,7 +21,6 @@ export async function getStripeSubscriptions(
       created: { gte: sinceTs, lte: untilTs },
       limit: 100,
       status: "all",
-      expand: ["data.items.data.price"],
     };
     if (startingAfter) params.starting_after = startingAfter;
 
@@ -39,8 +38,8 @@ export async function getStripeSubscriptions(
 
   for (const sub of allSubs) {
     const utmCampaign = sub.metadata?.utm_campaign || "Direto / Organico";
-    const amount = sub.items.data[0]?.price?.unit_amount || 0;
-    const revenue = amount / 100;
+    const amount = sub.items.data[0]?.plan?.amount || sub.items.data[0]?.price?.unit_amount || 0;
+    const revenue = (typeof amount === "number" ? amount : 0) / 100;
 
     totalSales++;
     totalRevenue += revenue;
@@ -67,7 +66,8 @@ export async function getStripeRetentionData(): Promise<RetentionMetrics> {
   const now = Date.now() / 1000;
   const thirtyDaysAgo = now - 30 * 86400;
 
-  // Fetch ALL subscriptions
+  // Fetch subscriptions from last 12 months (avoid timeout)
+  const twelveMonthsAgo = Math.floor((Date.now() - 365 * 86400 * 1000) / 1000);
   const allSubs: Stripe.Subscription[] = [];
   let hasMore = true;
   let startingAfter: string | undefined;
@@ -76,7 +76,7 @@ export async function getStripeRetentionData(): Promise<RetentionMetrics> {
     const params: Stripe.SubscriptionListParams = {
       limit: 100,
       status: "all",
-      expand: ["data.items.data.price"],
+      created: { gte: twelveMonthsAgo },
     };
     if (startingAfter) params.starting_after = startingAfter;
 
@@ -113,7 +113,8 @@ export async function getStripeRetentionData(): Promise<RetentionMetrics> {
       ? (canceledTs - createdTs) / 86400
       : (now - createdTs) / 86400;
 
-    const monthlyPrice = (sub.items.data[0]?.price?.unit_amount || 0) / 100;
+    const priceAmount = sub.items.data[0]?.plan?.amount || sub.items.data[0]?.price?.unit_amount || 0;
+    const monthlyPrice = (typeof priceAmount === "number" ? priceAmount : 0) / 100;
     const lifetimeMonths = Math.max(lifetimeDays / 30, 1);
     const ltv = monthlyPrice * lifetimeMonths;
 
