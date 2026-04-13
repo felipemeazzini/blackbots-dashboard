@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
-import { LayoutDashboard, Megaphone, Target, Globe, Trophy, ArrowLeftRight, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, Megaphone, Target, Globe, Trophy, ArrowLeftRight, HeartPulse, Users, LogOut } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/geral", label: "Visao Geral", icon: Globe },
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/campanhas", label: "Campanhas", icon: Megaphone },
   { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/comparativo", label: "Comparativo", icon: ArrowLeftRight },
+  { href: "/retencao", label: "Retencao", icon: HeartPulse },
   { href: "/metas", label: "Metas", icon: Target },
 ];
 
