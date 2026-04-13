@@ -19,7 +19,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Allow data API routes
-  if (pathname.startsWith("/api/facebook") || pathname.startsWith("/api/goals") || pathname.startsWith("/api/budgets") || pathname.startsWith("/api/user-access")) {
+  if (pathname.startsWith("/api/facebook") || pathname.startsWith("/api/stripe") || pathname.startsWith("/api/goals") || pathname.startsWith("/api/budgets") || pathname.startsWith("/api/user-access")) {
     return NextResponse.next();
   }
 
