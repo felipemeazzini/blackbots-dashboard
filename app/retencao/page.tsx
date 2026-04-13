@@ -18,11 +18,23 @@ export default function RetencaoPage() {
   const { selectedAccountId, setSelectedAccountId, dateRange, setPreset, setCustomRange, dateQueryString } = useAppContext();
   const { accounts } = useFilteredAccounts();
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
+  const isAllAccounts = activeAccount === "all";
 
   const { data: retention, loading } = useRetentionData();
 
-  // Facebook spend por campanha (last 90d para CAC)
-  const { data: fbInsights } = useInsights(activeAccount, dateQueryString, "campaign", "1");
+  // Facebook spend por campanha — buscar de cada conta
+  const { data: fbInsights0 } = useInsights(
+    !isAllAccounts ? activeAccount : (accounts[0]?.id || null),
+    dateQueryString, "campaign", "1"
+  );
+  const { data: fbInsights1 } = useInsights(
+    isAllAccounts ? (accounts[1]?.id || null) : null,
+    dateQueryString, "campaign", "1"
+  );
+  const { data: fbInsights2 } = useInsights(
+    isAllAccounts ? (accounts[2]?.id || null) : null,
+    dateQueryString, "campaign", "1"
+  );
 
   const [sortKey, setSortKey] = useState<SortKey>("totalLtv");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -32,14 +44,19 @@ export default function RetencaoPage() {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
-  // Compute Facebook spend by campaign name
+  // Compute Facebook spend by campaign name (all accounts combined)
   const fbSpendByCampaign = useMemo(() => {
-    if (!fbInsights?.data) return new Map<string, number>();
+    const allInsights = [
+      ...(fbInsights0?.data || []),
+      ...(fbInsights1?.data || []),
+      ...(fbInsights2?.data || []),
+    ] as InsightRow[];
+
+    if (allInsights.length === 0) return new Map<string, number>();
     const map = new Map<string, number>();
-    const insightsList = fbInsights.data as InsightRow[];
 
     const byCamp = new Map<string, InsightRow[]>();
-    for (const row of insightsList) {
+    for (const row of allInsights) {
       const name = String(row.campaign_name || "");
       if (!name) continue;
       if (!byCamp.has(name)) byCamp.set(name, []);
@@ -51,7 +68,7 @@ export default function RetencaoPage() {
       map.set(name, m.spend);
     }
     return map;
-  }, [fbInsights]);
+  }, [fbInsights0, fbInsights1, fbInsights2]);
 
   // Enrich retention data with CAC from Facebook
   const tableData = useMemo(() => {
