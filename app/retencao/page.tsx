@@ -18,8 +18,7 @@ export default function RetencaoPage() {
   const { accounts } = useFilteredAccounts();
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
 
-  const { data: retentionResponse, loading } = useRetentionData();
-  const retention = retentionResponse?.data;
+  const { data: retention, loading, progress } = useRetentionData();
 
   // Facebook spend por campanha (last 90d para CAC)
   const { data: fbInsights } = useInsights(activeAccount, "preset=last_90d", "campaign", "1");
@@ -122,9 +121,18 @@ export default function RetencaoPage() {
       </header>
 
       <div className="p-6 space-y-6">
-        {loading ? (
-          <p className="text-text-muted">Carregando dados de retencao...</p>
-        ) : retention ? (
+        {loading && !retention && (
+          <div className="text-center py-8">
+            <p className="text-text-muted text-sm">Carregando dados do Stripe...</p>
+            {progress > 0 && (
+              <p className="text-accent text-xs mt-1">{progress} assinaturas processadas</p>
+            )}
+          </div>
+        )}
+        {loading && retention && (
+          <p className="text-xs text-accent mb-2">Carregando mais dados... ({progress} assinaturas)</p>
+        )}
+        {retention ? (
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -238,9 +246,9 @@ export default function RetencaoPage() {
               </div>
             </div>
           </>
-        ) : (
+        ) : !loading ? (
           <p className="text-text-muted text-center py-12">Nenhum dado de retencao disponivel</p>
-        )}
+        ) : null}
       </div>
     </div>
   );
