@@ -8,20 +8,21 @@ import { useAppContext } from "@/contexts/AppContext";
 import { aggregateMetrics, emptyMetrics, formatMetric } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
 import { RetentionCampaignData } from "@/types/stripe";
+import DateRangePicker from "@/components/layout/DateRangePicker";
 import { HeartPulse, Users, TrendingDown, DollarSign, Clock, ChevronDown, ChevronUp } from "lucide-react";
 
 type InsightRow = ProcessedMetrics & Record<string, unknown>;
 type SortKey = "totalCustomers" | "activeCustomers" | "churnRate" | "avgLifetimeMonths" | "avgLtv" | "totalLtv" | "cac" | "ltvCac" | "payback";
 
 export default function RetencaoPage() {
-  const { selectedAccountId, setSelectedAccountId } = useAppContext();
+  const { selectedAccountId, setSelectedAccountId, dateRange, setPreset, setCustomRange, dateQueryString } = useAppContext();
   const { accounts } = useFilteredAccounts();
   const activeAccount = selectedAccountId || accounts[0]?.id || "";
 
   const { data: retention, loading } = useRetentionData();
 
   // Facebook spend por campanha (last 90d para CAC)
-  const { data: fbInsights } = useInsights(activeAccount, "preset=last_90d", "campaign", "1");
+  const { data: fbInsights } = useInsights(activeAccount, dateQueryString, "campaign", "1");
 
   const [sortKey, setSortKey] = useState<SortKey>("totalLtv");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -108,15 +109,25 @@ export default function RetencaoPage() {
             <HeartPulse size={20} className="text-green" />
             <h2 className="text-lg font-semibold text-text-primary">Retencao / LTV</h2>
           </div>
-          <select
-            value={activeAccount}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
-            className="bg-bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary max-w-[280px]"
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-4">
+            <select
+              value={activeAccount}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              className="bg-bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary max-w-[280px]"
+            >
+              <option value="all">Todas as contas</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+            <DateRangePicker
+              selectedPreset={dateRange.preset}
+              customSince={dateRange.customSince}
+              customUntil={dateRange.customUntil}
+              onPresetChange={setPreset}
+              onCustomChange={setCustomRange}
+            />
+          </div>
         </div>
       </header>
 
