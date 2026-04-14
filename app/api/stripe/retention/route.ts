@@ -120,7 +120,7 @@ async function aggregateFromCache() {
     bySub.set(subId, existing);
   }
 
-  const byCampaign = new Map<string, Array<{ ltv: number; lifetimeDays: number; invoices: number; isActive: boolean }>>();
+  const byCampaign = new Map<string, Array<{ ltv: number; lifetimeDays: number; invoices: number; isActive: boolean; firstPaid: number }>>();
   let totalActive = 0;
   let recentCancels = 0;
 
