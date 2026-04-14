@@ -12,7 +12,7 @@ import DateRangePicker from "@/components/layout/DateRangePicker";
 import { HeartPulse, Users, TrendingDown, DollarSign, Clock, ChevronDown, ChevronUp } from "lucide-react";
 
 type InsightRow = ProcessedMetrics & Record<string, unknown>;
-type SortKey = "totalCustomers" | "activeCustomers" | "churnRate" | "avgLifetimeMonths" | "avgLtv" | "totalLtv" | "cac" | "ltvCac" | "payback";
+type SortKey = "totalCustomers" | "activeCustomers" | "churnRate" | "avgLifetimeMonths" | "avgLtv" | "totalLtv" | "cacLifetime" | "cacPeriod" | "ltvCac" | "payback";
 
 export default function RetencaoPage() {
   const { selectedAccountId, setSelectedAccountId, dateRange, setPreset, setCustomRange, dateQueryString } = useAppContext();
@@ -22,17 +22,21 @@ export default function RetencaoPage() {
 
   const { data: retention, loading } = useRetentionData();
 
-  // Facebook spend por campanha — buscar de cada conta
-  const { data: fbInsights0 } = useInsights(
+  // Facebook spend LIFETIME (all time) — para CAC Lifetime
+  const { data: fbLifetime0 } = useInsights(
+    accounts[0]?.id || null, "preset=maximum", "campaign", "1"
+  );
+  const { data: fbLifetime1 } = useInsights(
+    accounts[1]?.id || null, "preset=maximum", "campaign", "1"
+  );
+
+  // Facebook spend DO PERIODO selecionado — para CAC do Periodo
+  const { data: fbPeriod0 } = useInsights(
     !isAllAccounts ? activeAccount : (accounts[0]?.id || null),
     dateQueryString, "campaign", "1"
   );
-  const { data: fbInsights1 } = useInsights(
+  const { data: fbPeriod1 } = useInsights(
     isAllAccounts ? (accounts[1]?.id || null) : null,
-    dateQueryString, "campaign", "1"
-  );
-  const { data: fbInsights2 } = useInsights(
-    isAllAccounts ? (accounts[2]?.id || null) : null,
     dateQueryString, "campaign", "1"
   );
 
@@ -44,17 +48,14 @@ export default function RetencaoPage() {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
-  // Compute Facebook spend by campaign name (all accounts combined)
-  const fbSpendByCampaign = useMemo(() => {
-    const allInsights = [
-      ...(fbInsights0?.data || []),
-      ...(fbInsights1?.data || []),
-      ...(fbInsights2?.data || []),
-    ] as InsightRow[];
-
-    if (allInsights.length === 0) return new Map<string, number>();
+  // Helper: compute spend by campaign from insights
+  function buildSpendMap(datasets: Array<{ data?: unknown[] } | null>): Map<string, number> {
+    const allInsights: InsightRow[] = [];
+    for (const ds of datasets) {
+      if (ds?.data) allInsights.push(...(ds.data as InsightRow[]));
+    }
+    if (allInsights.length === 0) return new Map();
     const map = new Map<string, number>();
-
     const byCamp = new Map<string, InsightRow[]>();
     for (const row of allInsights) {
       const name = String(row.campaign_name || "");
@@ -62,49 +63,74 @@ export default function RetencaoPage() {
       if (!byCamp.has(name)) byCamp.set(name, []);
       byCamp.get(name)!.push(row);
     }
-
     for (const [name, rows] of byCamp) {
       const m = aggregateMetrics(rows);
       map.set(name, m.spend);
     }
     return map;
-  }, [fbInsights0, fbInsights1, fbInsights2]);
+  }
 
-  // Enrich retention data with CAC from Facebook
+  // Lifetime spend (all time) — for CAC Lifetime
+  const fbSpendLifetime = useMemo(
+    () => buildSpendMap([fbLifetime0, fbLifetime1]),
+    [fbLifetime0, fbLifetime1]
+  );
+
+  // Period spend — for CAC do Periodo
+  const fbSpendPeriod = useMemo(
+    () => buildSpendMap([fbPeriod0, fbPeriod1]),
+    [fbPeriod0, fbPeriod1]
+  );
+
+  // Match FB spend to campaign by name
+  function matchSpend(utmCampaign: string, spendMap: Map<string, number>): number {
+    let total = 0;
+    for (const [name, spend] of spendMap) {
+      if (name.includes(utmCampaign) || utmCampaign.includes(name) ||
+          name.startsWith(utmCampaign.substring(0, 30))) {
+        total += spend;
+      }
+    }
+    return total;
+  }
+
+  // Enrich retention data with both CACs
   const tableData = useMemo(() => {
     if (!retention) return [];
     return retention.byCampaign.map((camp) => {
-      // Match FB campaign by name
-      let fbSpend = 0;
-      for (const [name, spend] of fbSpendByCampaign) {
-        if (name.includes(camp.utmCampaign) || camp.utmCampaign.includes(name) ||
-            name.startsWith(camp.utmCampaign.substring(0, 30))) {
-          fbSpend += spend;
-        }
-      }
-      const cac = camp.totalCustomers > 0 ? fbSpend / camp.totalCustomers : 0;
-      const ltvCac = cac > 0 ? camp.avgLtv / cac : 0;
-      const payback = camp.avgMonthlyPrice > 0 ? cac / camp.avgMonthlyPrice : 0;
+      const spendLifetime = matchSpend(camp.utmCampaign, fbSpendLifetime);
+      const spendPeriod = matchSpend(camp.utmCampaign, fbSpendPeriod);
 
-      return { ...camp, cac, ltvCac, payback };
+      const cacLifetime = camp.totalCustomers > 0 ? spendLifetime / camp.totalCustomers : 0;
+      const cacPeriod = camp.totalCustomers > 0 ? spendPeriod / camp.totalCustomers : 0;
+      const ltvCac = cacLifetime > 0 ? camp.avgLtv / cacLifetime : 0;
+      const payback = camp.avgMonthlyPrice > 0 ? cacLifetime / camp.avgMonthlyPrice : 0;
+
+      return { ...camp, cacLifetime, cacPeriod, ltvCac, payback };
     }).sort((a, b) => {
       const aVal = a[sortKey as keyof typeof a] as number;
       const bVal = b[sortKey as keyof typeof b] as number;
       return sortDir === "asc" ? aVal - bVal : bVal - aVal;
     });
-  }, [retention, fbSpendByCampaign, sortKey, sortDir]);
+  }, [retention, fbSpendLifetime, fbSpendPeriod, sortKey, sortDir]);
 
-  // Total FB spend for overview CAC
-  const totalFbSpend = useMemo(() => {
+  // Total FB spend for overview
+  const totalFbSpendLifetime = useMemo(() => {
     let total = 0;
-    for (const spend of fbSpendByCampaign.values()) total += spend;
+    for (const spend of fbSpendLifetime.values()) total += spend;
     return total;
-  }, [fbSpendByCampaign]);
+  }, [fbSpendLifetime]);
 
-  const overviewCac = retention && retention.overview.totalSubscribers > 0
-    ? totalFbSpend / retention.overview.totalSubscribers : 0;
-  const overviewLtvCac = overviewCac > 0 && retention
-    ? retention.overview.avgLtv / overviewCac : 0;
+  const totalFbSpendPeriod = useMemo(() => {
+    let total = 0;
+    for (const spend of fbSpendPeriod.values()) total += spend;
+    return total;
+  }, [fbSpendPeriod]);
+
+  const overviewCacLifetime = retention && retention.overview.totalSubscribers > 0
+    ? totalFbSpendLifetime / retention.overview.totalSubscribers : 0;
+  const overviewLtvCac = overviewCacLifetime > 0 && retention
+    ? retention.overview.avgLtv / overviewCacLifetime : 0;
 
   const SortHeader = ({ label, k, color }: { label: string; k: SortKey; color?: string }) => (
     <th
@@ -183,25 +209,36 @@ export default function RetencaoPage() {
             {/* Metricas Ajustadas */}
             <div className="bg-bg-surface border border-green/20 rounded-xl p-5">
               <h3 className="text-sm font-medium text-green mb-3">Metricas Ajustadas com LTV</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div>
-                  <p className="text-[10px] text-text-muted uppercase">CAC Real</p>
-                  <p className="text-lg font-bold text-text-primary">{formatMetric(overviewCac, "currency")}</p>
+                  <p className="text-[10px] text-text-muted uppercase">CAC Lifetime</p>
+                  <p className="text-xs text-text-muted mb-1">Gasto total FB / total clientes</p>
+                  <p className="text-lg font-bold text-text-primary">{formatMetric(overviewCacLifetime, "currency")}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-text-muted uppercase">LTV Medio</p>
+                  <p className="text-xs text-text-muted mb-1">Receita real por cliente</p>
                   <p className="text-lg font-bold text-purple">{formatMetric(retention.overview.avgLtv, "currency")}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted uppercase">ROAS com LTV</p>
-                  <p className="text-lg font-bold" style={{ color: overviewLtvCac >= 1 ? "#22C55E" : "#EF4444" }}>
-                    {totalFbSpend > 0 ? ((retention.overview.avgLtv * retention.overview.totalSubscribers) / totalFbSpend).toFixed(2) : "0.00"}x
+                  <p className="text-[10px] text-text-muted uppercase">LTV/CAC</p>
+                  <p className="text-xs text-text-muted mb-1">Saudavel se {">"}= 3x</p>
+                  <p className="text-lg font-bold" style={{ color: overviewLtvCac >= 3 ? "#22C55E" : overviewLtvCac >= 1 ? "#F5A623" : "#EF4444" }}>
+                    {overviewLtvCac > 0 ? overviewLtvCac.toFixed(1) + "x" : "—"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted uppercase">Payback Medio</p>
+                  <p className="text-[10px] text-text-muted uppercase">ROAS com LTV</p>
+                  <p className="text-xs text-text-muted mb-1">LTV total / gasto total FB</p>
+                  <p className="text-lg font-bold" style={{ color: overviewLtvCac >= 1 ? "#22C55E" : "#EF4444" }}>
+                    {totalFbSpendLifetime > 0 ? ((retention.overview.avgLtv * retention.overview.totalSubscribers) / totalFbSpendLifetime).toFixed(2) : "—"}x
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-text-muted uppercase">Payback</p>
+                  <p className="text-xs text-text-muted mb-1">Meses pra recuperar CAC</p>
                   <p className="text-lg font-bold text-accent">
-                    {retention.overview.avgMonthlyPrice > 0 ? (overviewCac / retention.overview.avgMonthlyPrice).toFixed(1) : "—"} meses
+                    {retention.overview.avgMonthlyPrice > 0 && overviewCacLifetime > 0 ? (overviewCacLifetime / retention.overview.avgMonthlyPrice).toFixed(1) : "—"} meses
                   </p>
                 </div>
               </div>
@@ -224,7 +261,8 @@ export default function RetencaoPage() {
                         <SortHeader label="Tempo" k="avgLifetimeMonths" />
                         <SortHeader label="LTV Medio" k="avgLtv" color="text-purple" />
                         <SortHeader label="LTV Total" k="totalLtv" color="text-purple" />
-                        <SortHeader label="CAC" k="cac" />
+                        <SortHeader label="CAC Life" k="cacLifetime" />
+                        <SortHeader label="CAC Periodo" k="cacPeriod" />
                         <SortHeader label="LTV/CAC" k="ltvCac" />
                         <SortHeader label="Payback" k="payback" />
                       </tr>
@@ -252,7 +290,10 @@ export default function RetencaoPage() {
                               {formatMetric(c.totalLtv, "currency")}
                             </td>
                             <td className="text-right px-3 py-3 text-text-secondary tabular-nums">
-                              {c.cac > 0 ? formatMetric(c.cac, "currency") : "—"}
+                              {c.cacLifetime > 0 ? formatMetric(c.cacLifetime, "currency") : "—"}
+                            </td>
+                            <td className="text-right px-3 py-3 text-text-muted tabular-nums">
+                              {c.cacPeriod > 0 ? formatMetric(c.cacPeriod, "currency") : "—"}
                             </td>
                             <td className="text-right px-3 py-3 tabular-nums font-bold" style={{ color: ltvColor }}>
                               {c.ltvCac > 0 ? c.ltvCac.toFixed(1) + "x" : "—"}
