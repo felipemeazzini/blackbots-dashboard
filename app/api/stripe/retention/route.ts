@@ -131,7 +131,7 @@ async function aggregateFromCache() {
     if (!isActive && sub.lastPaid > thirtyDaysAgo) recentCancels++;
 
     const arr = byCampaign.get(sub.utm) || [];
-    arr.push({ ltv: sub.totalPaid, lifetimeDays, invoices: sub.invoiceCount, isActive });
+    arr.push({ ltv: sub.totalPaid, lifetimeDays, invoices: sub.invoiceCount, isActive, firstPaid: sub.firstPaid });
     byCampaign.set(sub.utm, arr);
   }
 
@@ -168,6 +168,7 @@ async function aggregateFromCache() {
       avgLtv: subs.reduce((s, d) => s + d.ltv, 0) / tc,
       totalLtv: subs.reduce((s, d) => s + d.ltv, 0),
       avgMonthlyPrice: subs.reduce((s, d) => s + d.ltv / Math.max(d.invoices, 1), 0) / tc,
+      customerAcquisitionDates: subs.map((s) => s.firstPaid),
     };
   }).sort((a, b) => b.totalLtv - a.totalLtv);
 

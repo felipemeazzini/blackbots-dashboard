@@ -22,6 +22,7 @@ export interface RetentionCampaignData {
   avgLtv: number;
   totalLtv: number;
   avgMonthlyPrice: number;
+  customerAcquisitionDates?: number[];
 }
 
 export interface RetentionOverview {

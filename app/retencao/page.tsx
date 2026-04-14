@@ -94,6 +94,10 @@ export default function RetencaoPage() {
     return total;
   }
 
+  // Period date range for filtering new customers
+  const periodStart = dateRange.customSince ? new Date(dateRange.customSince).getTime() : 0;
+  const periodEnd = dateRange.customUntil ? new Date(dateRange.customUntil + "T23:59:59").getTime() : Date.now();
+
   // Enrich retention data with both CACs
   const tableData = useMemo(() => {
     if (!retention) return [];
@@ -101,18 +105,22 @@ export default function RetencaoPage() {
       const spendLifetime = matchSpend(camp.utmCampaign, fbSpendLifetime);
       const spendPeriod = matchSpend(camp.utmCampaign, fbSpendPeriod);
 
+      // Count NEW customers acquired in the selected period
+      const newCustomersInPeriod = (camp.customerAcquisitionDates || [])
+        .filter((ts) => ts >= periodStart && ts <= periodEnd).length;
+
       const cacLifetime = camp.totalCustomers > 0 ? spendLifetime / camp.totalCustomers : 0;
-      const cacPeriod = camp.totalCustomers > 0 ? spendPeriod / camp.totalCustomers : 0;
+      const cacPeriod = newCustomersInPeriod > 0 ? spendPeriod / newCustomersInPeriod : 0;
       const ltvCac = cacLifetime > 0 ? camp.avgLtv / cacLifetime : 0;
       const payback = camp.avgMonthlyPrice > 0 ? cacLifetime / camp.avgMonthlyPrice : 0;
 
-      return { ...camp, cacLifetime, cacPeriod, ltvCac, payback };
+      return { ...camp, cacLifetime, cacPeriod, newCustomersInPeriod, ltvCac, payback };
     }).sort((a, b) => {
       const aVal = a[sortKey as keyof typeof a] as number;
       const bVal = b[sortKey as keyof typeof b] as number;
       return sortDir === "asc" ? aVal - bVal : bVal - aVal;
     });
-  }, [retention, fbSpendLifetime, fbSpendPeriod, sortKey, sortDir]);
+  }, [retention, fbSpendLifetime, fbSpendPeriod, periodStart, periodEnd, sortKey, sortDir]);
 
   // Total FB spend for overview
   const totalFbSpendLifetime = useMemo(() => {
@@ -294,6 +302,9 @@ export default function RetencaoPage() {
                             </td>
                             <td className="text-right px-3 py-3 text-text-muted tabular-nums">
                               {c.cacPeriod > 0 ? formatMetric(c.cacPeriod, "currency") : "—"}
+                              {c.newCustomersInPeriod > 0 && (
+                                <span className="block text-[9px] text-text-muted">{c.newCustomersInPeriod} novos</span>
+                              )}
                             </td>
                             <td className="text-right px-3 py-3 tabular-nums font-bold" style={{ color: ltvColor }}>
                               {c.ltvCac > 0 ? c.ltvCac.toFixed(1) + "x" : "—"}
