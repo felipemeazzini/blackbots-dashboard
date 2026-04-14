@@ -1,15 +1,15 @@
 "use client";
 
 import { useFetch } from "./useFacebookData";
-import { RetentionMetrics } from "@/types/stripe";
+import { StripeSubscriptionData } from "@/types/stripe";
 
 export function useRetentionData() {
-  const { data, loading, error } = useFetch<{ data: RetentionMetrics | null; done?: boolean }>(
+  const { data, loading, error } = useFetch<{ data: StripeSubscriptionData[] }>(
     "/api/stripe/retention"
   );
 
   return {
-    data: data?.data || null,
+    subscriptions: data?.data || [],
     loading,
     error,
   };

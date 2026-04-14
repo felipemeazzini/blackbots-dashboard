@@ -10,7 +10,19 @@ export interface StripeMetrics {
   byCampaignName: CampaignStripeData[];
 }
 
-// Retention / LTV types
+// Retention: raw subscription data from API
+export interface StripeSubscriptionData {
+  subscriptionId: string;
+  utmCampaign: string;
+  totalPaid: number;
+  firstPaid: number;
+  lastPaid: number;
+  invoiceCount: number;
+  isActive: boolean;
+  lifetimeDays: number;
+}
+
+// Retention: aggregated campaign data (computed client-side)
 export interface RetentionCampaignData {
   utmCampaign: string;
   totalCustomers: number;

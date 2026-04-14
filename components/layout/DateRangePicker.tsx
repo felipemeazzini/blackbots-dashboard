@@ -38,6 +38,8 @@ function applyPreset(preset: string): { since: string; until: string } | null {
     }
     case "last_90d":
       return { since: fmt(subDays(today, 90)), until: fmt(today) };
+    case "maximum":
+      return { since: "2024-01-01", until: fmt(today) };
     default:
       return null;
   }
@@ -49,6 +51,7 @@ const QUICK_PRESETS = [
   { key: "last_30d", label: "30d" },
   { key: "this_month", label: "Mes" },
   { key: "last_90d", label: "90d" },
+  { key: "maximum", label: "Tudo" },
 ];
 
 export default function DateRangePicker({

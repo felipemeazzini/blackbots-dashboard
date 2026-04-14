@@ -2,155 +2,176 @@
 
 import { useState, useMemo } from "react";
 import { useRetentionData } from "@/hooks/useRetentionData";
-import { useInsights } from "@/hooks/useFacebookData";
+import { useInsights, useCampaigns } from "@/hooks/useFacebookData";
 import { useFilteredAccounts } from "@/hooks/useFilteredAccounts";
 import { useAppContext } from "@/contexts/AppContext";
-import { aggregateMetrics, emptyMetrics, formatMetric } from "@/lib/metrics";
+import { aggregateMetrics, formatMetric } from "@/lib/metrics";
 import { ProcessedMetrics } from "@/types/metrics";
-import { RetentionCampaignData } from "@/types/stripe";
+import { StripeSubscriptionData } from "@/types/stripe";
 import DateRangePicker from "@/components/layout/DateRangePicker";
-import { HeartPulse, Users, TrendingDown, DollarSign, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { HeartPulse, Users, TrendingDown, DollarSign, Clock, ChevronDown, ChevronRight, Zap, Leaf } from "lucide-react";
 
 type InsightRow = ProcessedMetrics & Record<string, unknown>;
-type SortKey = "totalCustomers" | "activeCustomers" | "churnRate" | "avgLifetimeMonths" | "avgLtv" | "totalLtv" | "cacLifetime" | "cacPeriod" | "ltvCac" | "payback";
+
+// Helper: aggregate subscriptions into metrics
+function aggregateSubs(subs: StripeSubscriptionData[]) {
+  const total = subs.length;
+  if (total === 0) return { total: 0, active: 0, canceled: 0, churnRate: 0, avgLtv: 0, totalLtv: 0, avgLifetimeMonths: 0, avgMonthlyPrice: 0 };
+  const active = subs.filter((s) => s.isActive).length;
+  const canceled = total - active;
+  const now = Date.now();
+  const thirtyDaysAgo = now - 30 * 86400 * 1000;
+  const recentCancels = subs.filter((s) => !s.isActive && s.lastPaid > thirtyDaysAgo).length;
+  const churnRate = active > 0 ? (recentCancels / (active + recentCancels)) * 100 : 0;
+  const avgLtv = subs.reduce((s, d) => s + d.totalPaid, 0) / total;
+  const totalLtv = subs.reduce((s, d) => s + d.totalPaid, 0);
+  const avgLifetimeDays = subs.reduce((s, d) => s + d.lifetimeDays, 0) / total;
+  const avgMonthlyPrice = subs.reduce((s, d) => s + d.totalPaid / Math.max(d.invoiceCount, 1), 0) / total;
+  return { total, active, canceled, churnRate, avgLtv, totalLtv, avgLifetimeMonths: avgLifetimeDays / 30, avgMonthlyPrice };
+}
 
 export default function RetencaoPage() {
-  const { selectedAccountId, setSelectedAccountId, dateRange, setPreset, setCustomRange, dateQueryString } = useAppContext();
+  const { dateRange, setPreset, setCustomRange, dateQueryString } = useAppContext();
   const { accounts } = useFilteredAccounts();
-  const activeAccount = selectedAccountId || accounts[0]?.id || "";
-  const isAllAccounts = activeAccount === "all";
 
-  const { data: retention, loading } = useRetentionData();
+  const { subscriptions, loading } = useRetentionData();
 
-  // Facebook spend LIFETIME (all time) — para CAC Lifetime
-  const { data: fbLifetime0 } = useInsights(
-    accounts[0]?.id || null, "preset=maximum", "campaign", "1"
-  );
-  const { data: fbLifetime1 } = useInsights(
-    accounts[1]?.id || null, "preset=maximum", "campaign", "1"
-  );
+  // Facebook campaigns per account (for name -> account mapping)
+  const { data: campaigns0 } = useCampaigns(accounts[0]?.id || null);
+  const { data: campaigns1 } = useCampaigns(accounts[1]?.id || null);
 
-  // Facebook spend DO PERIODO selecionado — para CAC do Periodo
-  const { data: fbPeriod0 } = useInsights(
-    !isAllAccounts ? activeAccount : (accounts[0]?.id || null),
-    dateQueryString, "campaign", "1"
-  );
-  const { data: fbPeriod1 } = useInsights(
-    isAllAccounts ? (accounts[1]?.id || null) : null,
-    dateQueryString, "campaign", "1"
-  );
+  // Facebook spend LIFETIME per account (last 90d covers active campaign period)
+  const { data: fbAll0 } = useInsights(accounts[0]?.id || null, "preset=last_90d", "campaign", "1");
+  const { data: fbAll1 } = useInsights(accounts[1]?.id || null, "preset=last_90d", "campaign", "1");
 
-  const [sortKey, setSortKey] = useState<SortKey>("totalLtv");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  // Facebook spend DO PERIODO per account
+  const { data: fbPeriod0 } = useInsights(accounts[0]?.id || null, dateQueryString, "campaign", "1");
+  const { data: fbPeriod1 } = useInsights(accounts[1]?.id || null, dateQueryString, "campaign", "1");
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("desc"); }
-  };
+  const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
 
-  // Helper: compute spend by campaign from insights
+  // Build campaign name -> account mapping from CAMPAIGNS API (exact match with Stripe utm)
+  const campaignAccountMap = useMemo(() => {
+    const map = new Map<string, { accountId: string; accountName: string }>();
+    for (let i = 0; i < accounts.length; i++) {
+      const camps = i === 0 ? campaigns0?.data : campaigns1?.data;
+      if (!camps) continue;
+      for (const camp of camps) {
+        map.set(camp.name, { accountId: accounts[i].id, accountName: accounts[i].name });
+      }
+    }
+    return map;
+  }, [accounts, campaigns0, campaigns1]);
+
+  // Build spend maps
   function buildSpendMap(datasets: Array<{ data?: unknown[] } | null>): Map<string, number> {
-    const allInsights: InsightRow[] = [];
-    for (const ds of datasets) {
-      if (ds?.data) allInsights.push(...(ds.data as InsightRow[]));
-    }
-    if (allInsights.length === 0) return new Map();
     const map = new Map<string, number>();
-    const byCamp = new Map<string, InsightRow[]>();
-    for (const row of allInsights) {
-      const name = String(row.campaign_name || "");
-      if (!name) continue;
-      if (!byCamp.has(name)) byCamp.set(name, []);
-      byCamp.get(name)!.push(row);
-    }
-    for (const [name, rows] of byCamp) {
-      const m = aggregateMetrics(rows);
-      map.set(name, m.spend);
+    for (const ds of datasets) {
+      if (!ds?.data) continue;
+      const byCamp = new Map<string, InsightRow[]>();
+      for (const row of ds.data as InsightRow[]) {
+        const name = String(row.campaign_name || "");
+        if (!name) continue;
+        if (!byCamp.has(name)) byCamp.set(name, []);
+        byCamp.get(name)!.push(row);
+      }
+      for (const [name, rows] of byCamp) {
+        const m = aggregateMetrics(rows);
+        map.set(name, (map.get(name) || 0) + m.spend);
+      }
     }
     return map;
   }
 
-  // Lifetime spend (all time) — for CAC Lifetime
-  const fbSpendLifetime = useMemo(
-    () => buildSpendMap([fbLifetime0, fbLifetime1]),
-    [fbLifetime0, fbLifetime1]
-  );
+  const fbSpendLifetime = useMemo(() => buildSpendMap([fbAll0, fbAll1]), [fbAll0, fbAll1]);
+  const fbSpendPeriod = useMemo(() => buildSpendMap([fbPeriod0, fbPeriod1]), [fbPeriod0, fbPeriod1]);
 
-  // Period spend — for CAC do Periodo
-  const fbSpendPeriod = useMemo(
-    () => buildSpendMap([fbPeriod0, fbPeriod1]),
-    [fbPeriod0, fbPeriod1]
-  );
+  // Period dates
+  const periodStart = dateRange.customSince ? new Date(dateRange.customSince).getTime() : 0;
+  const periodEnd = dateRange.customUntil ? new Date(dateRange.customUntil + "T23:59:59").getTime() : Date.now();
+  const isAllTime = dateRange.preset === "maximum" || !periodStart;
 
-  // Match FB spend to campaign by name
+  // Filter subscriptions by period (acquired in period)
+  const filteredSubs = useMemo(() => {
+    if (isAllTime) return subscriptions;
+    return subscriptions.filter((s) => s.firstPaid >= periodStart && s.firstPaid <= periodEnd);
+  }, [subscriptions, periodStart, periodEnd, isAllTime]);
+
+  // Match utm_campaign to account — exact first, then fuzzy
+  function matchAccount(utmCampaign: string): { accountId: string; accountName: string } | null {
+    // Exact match
+    const exact = campaignAccountMap.get(utmCampaign);
+    if (exact) return exact;
+    // Fuzzy match
+    for (const [name, acc] of campaignAccountMap) {
+      if (name.includes(utmCampaign) || utmCampaign.includes(name) ||
+          (utmCampaign.length > 20 && name.startsWith(utmCampaign.substring(0, 20)))) {
+        return acc;
+      }
+    }
+    return null;
+  }
+
   function matchSpend(utmCampaign: string, spendMap: Map<string, number>): number {
     let total = 0;
     for (const [name, spend] of spendMap) {
-      if (name.includes(utmCampaign) || utmCampaign.includes(name) ||
-          name.startsWith(utmCampaign.substring(0, 30))) {
+      if (name.includes(utmCampaign) || utmCampaign.includes(name) || name.startsWith(utmCampaign.substring(0, 30))) {
         total += spend;
       }
     }
     return total;
   }
 
-  // Period date range for filtering new customers
-  const periodStart = dateRange.customSince ? new Date(dateRange.customSince).getTime() : 0;
-  const periodEnd = dateRange.customUntil ? new Date(dateRange.customUntil + "T23:59:59").getTime() : Date.now();
+  // Separate organic vs paid
+  const organicSubs = useMemo(() => filteredSubs.filter((s) => s.utmCampaign === "Direto / Organico"), [filteredSubs]);
+  const paidSubs = useMemo(() => filteredSubs.filter((s) => s.utmCampaign !== "Direto / Organico"), [filteredSubs]);
 
-  // Enrich retention data with both CACs
-  const tableData = useMemo(() => {
-    if (!retention) return [];
-    return retention.byCampaign.map((camp) => {
-      const spendLifetime = matchSpend(camp.utmCampaign, fbSpendLifetime);
-      const spendPeriod = matchSpend(camp.utmCampaign, fbSpendPeriod);
+  // Group paid subs by account
+  const byAccount = useMemo(() => {
+    const map = new Map<string, { accountName: string; subs: StripeSubscriptionData[] }>();
+    for (const sub of paidSubs) {
+      const acc = matchAccount(sub.utmCampaign);
+      const key = acc?.accountId || "unknown";
+      const name = acc?.accountName || "Outras Campanhas";
+      if (!map.has(key)) map.set(key, { accountName: name, subs: [] });
+      map.get(key)!.subs.push(sub);
+    }
+    return Array.from(map.entries()).map(([accountId, data]) => ({
+      accountId,
+      accountName: data.accountName,
+      subs: data.subs,
+      metrics: aggregateSubs(data.subs),
+    })).sort((a, b) => b.metrics.totalLtv - a.metrics.totalLtv);
+  }, [paidSubs, campaignAccountMap]);
 
-      // Count NEW customers acquired in the selected period
-      const newCustomersInPeriod = (camp.customerAcquisitionDates || [])
-        .filter((ts) => ts >= periodStart && ts <= periodEnd).length;
+  // Group by campaign within an account
+  function getCampaignRows(subs: StripeSubscriptionData[]) {
+    const byCamp = new Map<string, StripeSubscriptionData[]>();
+    for (const sub of subs) {
+      if (!byCamp.has(sub.utmCampaign)) byCamp.set(sub.utmCampaign, []);
+      byCamp.get(sub.utmCampaign)!.push(sub);
+    }
+    return Array.from(byCamp.entries()).map(([utmCampaign, campSubs]) => {
+      const m = aggregateSubs(campSubs);
+      const spend = isAllTime ? matchSpend(utmCampaign, fbSpendLifetime) : matchSpend(utmCampaign, fbSpendPeriod);
+      const cac = m.total > 0 ? spend / m.total : 0;
+      const ltvCac = cac > 0 ? m.avgLtv / cac : 0;
+      return { utmCampaign, ...m, spend, cac, ltvCac };
+    }).sort((a, b) => b.totalLtv - a.totalLtv);
+  }
 
-      const cacLifetime = camp.totalCustomers > 0 ? spendLifetime / camp.totalCustomers : 0;
-      const cacPeriod = newCustomersInPeriod > 0 ? spendPeriod / newCustomersInPeriod : 0;
-      const ltvCac = cacLifetime > 0 ? camp.avgLtv / cacLifetime : 0;
-      const payback = camp.avgMonthlyPrice > 0 ? cacLifetime / camp.avgMonthlyPrice : 0;
+  // Overall metrics
+  const overallMetrics = aggregateSubs(filteredSubs);
+  const organicMetrics = aggregateSubs(organicSubs);
+  const paidMetrics = aggregateSubs(paidSubs);
 
-      return { ...camp, cacLifetime, cacPeriod, newCustomersInPeriod, ltvCac, payback };
-    }).sort((a, b) => {
-      const aVal = a[sortKey as keyof typeof a] as number;
-      const bVal = b[sortKey as keyof typeof b] as number;
-      return sortDir === "asc" ? aVal - bVal : bVal - aVal;
-    });
-  }, [retention, fbSpendLifetime, fbSpendPeriod, periodStart, periodEnd, sortKey, sortDir]);
+  const totalSpend = isAllTime
+    ? Array.from(fbSpendLifetime.values()).reduce((s, v) => s + v, 0)
+    : Array.from(fbSpendPeriod.values()).reduce((s, v) => s + v, 0);
+  const paidCac = paidMetrics.total > 0 ? totalSpend / paidMetrics.total : 0;
+  const paidLtvCac = paidCac > 0 ? paidMetrics.avgLtv / paidCac : 0;
 
-  // Total FB spend for overview
-  const totalFbSpendLifetime = useMemo(() => {
-    let total = 0;
-    for (const spend of fbSpendLifetime.values()) total += spend;
-    return total;
-  }, [fbSpendLifetime]);
-
-  const totalFbSpendPeriod = useMemo(() => {
-    let total = 0;
-    for (const spend of fbSpendPeriod.values()) total += spend;
-    return total;
-  }, [fbSpendPeriod]);
-
-  const overviewCacLifetime = retention && retention.overview.totalSubscribers > 0
-    ? totalFbSpendLifetime / retention.overview.totalSubscribers : 0;
-  const overviewLtvCac = overviewCacLifetime > 0 && retention
-    ? retention.overview.avgLtv / overviewCacLifetime : 0;
-
-  const SortHeader = ({ label, k, color }: { label: string; k: SortKey; color?: string }) => (
-    <th
-      onClick={() => handleSort(k)}
-      className={`text-right px-3 py-3 text-xs font-medium uppercase cursor-pointer hover:text-accent transition-colors whitespace-nowrap ${color || "text-text-muted"}`}
-    >
-      <div className="flex items-center justify-end gap-1">
-        {label}
-        {sortKey === k && (sortDir === "desc" ? <ChevronDown size={12} /> : <ChevronUp size={12} />)}
-      </div>
-    </th>
-  );
+  const ltvCacColor = (v: number) => v >= 3 ? "#22C55E" : v >= 1 ? "#F5A623" : "#EF4444";
 
   return (
     <div>
@@ -160,46 +181,32 @@ export default function RetencaoPage() {
             <HeartPulse size={20} className="text-green" />
             <h2 className="text-lg font-semibold text-text-primary">Retencao / LTV</h2>
           </div>
-          <div className="flex items-center gap-4">
-            <select
-              value={activeAccount}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="bg-bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary max-w-[280px]"
-            >
-              <option value="all">Todas as contas</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-            <DateRangePicker
-              selectedPreset={dateRange.preset}
-              customSince={dateRange.customSince}
-              customUntil={dateRange.customUntil}
-              onPresetChange={setPreset}
-              onCustomChange={setCustomRange}
-            />
-          </div>
+          <DateRangePicker
+            selectedPreset={dateRange.preset}
+            customSince={dateRange.customSince}
+            customUntil={dateRange.customUntil}
+            onPresetChange={setPreset}
+            onCustomChange={setCustomRange}
+          />
         </div>
       </header>
 
       <div className="p-6 space-y-6">
-        {loading && !retention && (
+        {loading && subscriptions.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-text-muted text-sm">Sincronizando dados do Stripe...</p>
-            <p className="text-xs text-text-muted mt-1">Primeira carga pode demorar alguns segundos</p>
           </div>
-        )}
-        {retention ? (
+        ) : (
           <>
-            {/* KPI Cards */}
+            {/* KPIs Totais */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {[
-                { label: "TOTAL ASSINANTES", value: String(retention.overview.totalSubscribers), icon: Users, color: "#F5F5F5" },
-                { label: "ATIVOS", value: String(retention.overview.activeSubscribers), icon: HeartPulse, color: "#22C55E" },
-                { label: "CHURN MENSAL", value: `${retention.overview.monthlyChurnRate.toFixed(1)}%`, icon: TrendingDown, color: retention.overview.monthlyChurnRate > 10 ? "#EF4444" : "#F5A623" },
-                { label: "LTV MEDIO", value: formatMetric(retention.overview.avgLtv, "currency"), icon: DollarSign, color: "#A855F7" },
-                { label: "TEMPO MEDIO", value: `${retention.overview.avgLifetimeMonths.toFixed(1)} meses`, icon: Clock, color: "#F5A623" },
-                { label: "LTV/CAC", value: overviewLtvCac.toFixed(1) + "x", icon: DollarSign, color: overviewLtvCac >= 3 ? "#22C55E" : overviewLtvCac >= 1 ? "#F5A623" : "#EF4444" },
+                { label: "TOTAL ASSINANTES", value: String(overallMetrics.total), icon: Users, color: "#F5F5F5" },
+                { label: "ATIVOS", value: String(overallMetrics.active), icon: HeartPulse, color: "#22C55E" },
+                { label: "CHURN MENSAL", value: `${overallMetrics.churnRate.toFixed(1)}%`, icon: TrendingDown, color: overallMetrics.churnRate > 10 ? "#EF4444" : "#F5A623" },
+                { label: "LTV MEDIO", value: formatMetric(overallMetrics.avgLtv, "currency"), icon: DollarSign, color: "#A855F7" },
+                { label: "TEMPO MEDIO", value: `${overallMetrics.avgLifetimeMonths.toFixed(1)} meses`, icon: Clock, color: "#F5A623" },
+                { label: "RECEITA TOTAL", value: formatMetric(overallMetrics.totalLtv, "currency"), icon: DollarSign, color: "#22C55E" },
               ].map((card) => {
                 const Icon = card.icon;
                 return (
@@ -214,116 +221,164 @@ export default function RetencaoPage() {
               })}
             </div>
 
-            {/* Metricas Ajustadas */}
-            <div className="bg-bg-surface border border-green/20 rounded-xl p-5">
-              <h3 className="text-sm font-medium text-green mb-3">Metricas Ajustadas com LTV</h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div>
-                  <p className="text-[10px] text-text-muted uppercase">CAC Lifetime</p>
-                  <p className="text-xs text-text-muted mb-1">Gasto total FB / total clientes</p>
-                  <p className="text-lg font-bold text-text-primary">{formatMetric(overviewCacLifetime, "currency")}</p>
+            {/* Trafego Pago vs Organico */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Trafego Pago */}
+              <div className="bg-bg-surface border border-accent/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap size={16} className="text-accent" />
+                  <span className="text-sm font-semibold text-accent">Trafego Pago</span>
                 </div>
-                <div>
-                  <p className="text-[10px] text-text-muted uppercase">LTV Medio</p>
-                  <p className="text-xs text-text-muted mb-1">Receita real por cliente</p>
-                  <p className="text-lg font-bold text-purple">{formatMetric(retention.overview.avgLtv, "currency")}</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Clientes</p>
+                    <p className="text-lg font-bold text-text-primary">{paidMetrics.total}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Ativos</p>
+                    <p className="text-lg font-bold text-green">{paidMetrics.active}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">LTV Medio</p>
+                    <p className="text-lg font-bold text-purple">{formatMetric(paidMetrics.avgLtv, "currency")}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">CAC</p>
+                    <p className="text-lg font-bold text-text-primary">{paidCac > 0 ? formatMetric(paidCac, "currency") : "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">LTV/CAC</p>
+                    <p className="text-lg font-bold" style={{ color: ltvCacColor(paidLtvCac) }}>
+                      {paidLtvCac > 0 ? paidLtvCac.toFixed(1) + "x" : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Gasto Total FB</p>
+                    <p className="text-lg font-bold text-accent">{formatMetric(totalSpend, "currency")}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] text-text-muted uppercase">LTV/CAC</p>
-                  <p className="text-xs text-text-muted mb-1">Saudavel se {">"}= 3x</p>
-                  <p className="text-lg font-bold" style={{ color: overviewLtvCac >= 3 ? "#22C55E" : overviewLtvCac >= 1 ? "#F5A623" : "#EF4444" }}>
-                    {overviewLtvCac > 0 ? overviewLtvCac.toFixed(1) + "x" : "—"}
-                  </p>
+              </div>
+
+              {/* Organico */}
+              <div className="bg-bg-surface border border-green/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Leaf size={16} className="text-green" />
+                  <span className="text-sm font-semibold text-green">Direto / Organico</span>
                 </div>
-                <div>
-                  <p className="text-[10px] text-text-muted uppercase">ROAS com LTV</p>
-                  <p className="text-xs text-text-muted mb-1">LTV total / gasto total FB</p>
-                  <p className="text-lg font-bold" style={{ color: overviewLtvCac >= 1 ? "#22C55E" : "#EF4444" }}>
-                    {totalFbSpendLifetime > 0 ? ((retention.overview.avgLtv * retention.overview.totalSubscribers) / totalFbSpendLifetime).toFixed(2) : "—"}x
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-text-muted uppercase">Payback</p>
-                  <p className="text-xs text-text-muted mb-1">Meses pra recuperar CAC</p>
-                  <p className="text-lg font-bold text-accent">
-                    {retention.overview.avgMonthlyPrice > 0 && overviewCacLifetime > 0 ? (overviewCacLifetime / retention.overview.avgMonthlyPrice).toFixed(1) : "—"} meses
-                  </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Clientes</p>
+                    <p className="text-lg font-bold text-text-primary">{organicMetrics.total}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Ativos</p>
+                    <p className="text-lg font-bold text-green">{organicMetrics.active}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">LTV Medio</p>
+                    <p className="text-lg font-bold text-purple">{formatMetric(organicMetrics.avgLtv, "currency")}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Tempo Medio</p>
+                    <p className="text-lg font-bold text-accent">{organicMetrics.avgLifetimeMonths.toFixed(1)}m</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Churn</p>
+                    <p className="text-lg font-bold" style={{ color: organicMetrics.churnRate > 10 ? "#EF4444" : "#F5A623" }}>
+                      {organicMetrics.churnRate.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted uppercase">Receita Total</p>
+                    <p className="text-lg font-bold text-green">{formatMetric(organicMetrics.totalLtv, "currency")}</p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Tabela por campanha */}
+            {/* Retencao por Conta de Anuncio */}
             <div>
-              <h3 className="text-sm font-medium text-text-secondary mb-3">
-                Retencao por Campanha ({tableData.length})
-              </h3>
-              <div className="bg-bg-surface border border-border rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left px-4 py-3 text-xs text-text-muted font-medium uppercase">Campanha</th>
-                        <SortHeader label="Clientes" k="totalCustomers" />
-                        <SortHeader label="Ativos" k="activeCustomers" color="text-green" />
-                        <SortHeader label="Churn%" k="churnRate" />
-                        <SortHeader label="Tempo" k="avgLifetimeMonths" />
-                        <SortHeader label="LTV Medio" k="avgLtv" color="text-purple" />
-                        <SortHeader label="LTV Total" k="totalLtv" color="text-purple" />
-                        <SortHeader label="CAC Life" k="cacLifetime" />
-                        <SortHeader label="CAC Periodo" k="cacPeriod" />
-                        <SortHeader label="LTV/CAC" k="ltvCac" />
-                        <SortHeader label="Payback" k="payback" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tableData.map((c) => {
-                        const ltvColor = c.ltvCac >= 3 ? "#22C55E" : c.ltvCac >= 1 ? "#F5A623" : "#EF4444";
-                        return (
-                          <tr key={c.utmCampaign} className="border-b border-border/50 hover:bg-bg-hover">
-                            <td className="px-4 py-3 text-text-primary font-medium">
-                              <span className="truncate max-w-[200px] block" title={c.utmCampaign}>{c.utmCampaign}</span>
-                            </td>
-                            <td className="text-right px-3 py-3 text-text-secondary tabular-nums">{c.totalCustomers}</td>
-                            <td className="text-right px-3 py-3 text-green tabular-nums font-medium">{c.activeCustomers}</td>
-                            <td className="text-right px-3 py-3 tabular-nums" style={{ color: c.churnRate > 50 ? "#EF4444" : "#B0B0B0" }}>
-                              {c.churnRate.toFixed(0)}%
-                            </td>
-                            <td className="text-right px-3 py-3 text-text-secondary tabular-nums">
-                              {c.avgLifetimeMonths.toFixed(1)}m
-                            </td>
-                            <td className="text-right px-3 py-3 text-purple tabular-nums font-bold">
-                              {formatMetric(c.avgLtv, "currency")}
-                            </td>
-                            <td className="text-right px-3 py-3 text-purple tabular-nums font-bold">
-                              {formatMetric(c.totalLtv, "currency")}
-                            </td>
-                            <td className="text-right px-3 py-3 text-text-secondary tabular-nums">
-                              {c.cacLifetime > 0 ? formatMetric(c.cacLifetime, "currency") : "—"}
-                            </td>
-                            <td className="text-right px-3 py-3 text-text-muted tabular-nums">
-                              {c.cacPeriod > 0 ? formatMetric(c.cacPeriod, "currency") : "—"}
-                              {c.newCustomersInPeriod > 0 && (
-                                <span className="block text-[9px] text-text-muted">{c.newCustomersInPeriod} novos</span>
-                              )}
-                            </td>
-                            <td className="text-right px-3 py-3 tabular-nums font-bold" style={{ color: ltvColor }}>
-                              {c.ltvCac > 0 ? c.ltvCac.toFixed(1) + "x" : "—"}
-                            </td>
-                            <td className="text-right px-3 py-3 text-text-secondary tabular-nums">
-                              {c.payback > 0 ? c.payback.toFixed(1) + "m" : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+              <h3 className="text-sm font-medium text-text-secondary mb-3">Retencao por Conta de Anuncio</h3>
+              <div className="space-y-3">
+                {byAccount.map((acc) => {
+                  const isExpanded = expandedAccount === acc.accountId;
+                  const accSpend = isAllTime
+                    ? acc.subs.reduce((s, sub) => s + matchSpend(sub.utmCampaign, fbSpendLifetime), 0)
+                    : acc.subs.reduce((s, sub) => s + matchSpend(sub.utmCampaign, fbSpendPeriod), 0);
+                  const accCac = acc.metrics.total > 0 ? accSpend / acc.metrics.total : 0;
+                  const accLtvCac = accCac > 0 ? acc.metrics.avgLtv / accCac : 0;
+
+                  return (
+                    <div key={acc.accountId} className="bg-bg-surface border border-border rounded-xl overflow-hidden">
+                      {/* Account header */}
+                      <button
+                        onClick={() => setExpandedAccount(isExpanded ? null : acc.accountId)}
+                        className="w-full px-5 py-4 flex items-center justify-between hover:bg-bg-hover transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {isExpanded ? <ChevronDown size={16} className="text-accent" /> : <ChevronRight size={16} className="text-text-muted" />}
+                          <span className="text-sm font-semibold text-text-primary">{acc.accountName}</span>
+                        </div>
+                        <div className="flex items-center gap-6 text-xs">
+                          <span className="text-accent font-bold">Gasto {formatMetric(accSpend, "currency")}</span>
+                          <span className="text-text-muted">{acc.metrics.total} clientes</span>
+                          <span className="text-green">{acc.metrics.active} ativos</span>
+                          <span className="text-purple font-bold">LTV {formatMetric(acc.metrics.avgLtv, "currency")}</span>
+                          <span className="text-text-secondary">CAC {accCac > 0 ? formatMetric(accCac, "currency") : "—"}</span>
+                          <span className="font-bold" style={{ color: ltvCacColor(accLtvCac) }}>
+                            {accLtvCac > 0 ? accLtvCac.toFixed(1) + "x" : "—"}
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Expanded: campaign table */}
+                      {isExpanded && (
+                        <div className="border-t border-border">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-border/50">
+                                <th className="text-left px-4 py-2 text-xs text-text-muted font-medium uppercase">Campanha</th>
+                                <th className="text-right px-3 py-2 text-xs text-accent font-medium uppercase">Gasto</th>
+                                <th className="text-right px-3 py-2 text-xs text-text-muted font-medium uppercase">Clientes</th>
+                                <th className="text-right px-3 py-2 text-xs text-green font-medium uppercase">Ativos</th>
+                                <th className="text-right px-3 py-2 text-xs text-text-muted font-medium uppercase">Churn%</th>
+                                <th className="text-right px-3 py-2 text-xs text-text-muted font-medium uppercase">Tempo</th>
+                                <th className="text-right px-3 py-2 text-xs text-purple font-medium uppercase">LTV Med</th>
+                                <th className="text-right px-3 py-2 text-xs text-purple font-medium uppercase">LTV Total</th>
+                                <th className="text-right px-3 py-2 text-xs text-text-muted font-medium uppercase">CAC</th>
+                                <th className="text-right px-3 py-2 text-xs text-text-muted font-medium uppercase">LTV/CAC</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {getCampaignRows(acc.subs).map((c) => (
+                                <tr key={c.utmCampaign} className="border-b border-border/30 hover:bg-bg-hover">
+                                  <td className="px-4 py-2 text-text-primary">
+                                    <span className="truncate max-w-[200px] block" title={c.utmCampaign}>{c.utmCampaign}</span>
+                                  </td>
+                                  <td className="text-right px-3 py-2 text-accent tabular-nums font-bold">{c.spend > 0 ? formatMetric(c.spend, "currency") : "—"}</td>
+                                  <td className="text-right px-3 py-2 text-text-secondary tabular-nums">{c.total}</td>
+                                  <td className="text-right px-3 py-2 text-green tabular-nums">{c.active}</td>
+                                  <td className="text-right px-3 py-2 text-text-secondary tabular-nums">{c.churnRate.toFixed(0)}%</td>
+                                  <td className="text-right px-3 py-2 text-text-secondary tabular-nums">{c.avgLifetimeMonths.toFixed(1)}m</td>
+                                  <td className="text-right px-3 py-2 text-purple tabular-nums font-bold">{formatMetric(c.avgLtv, "currency")}</td>
+                                  <td className="text-right px-3 py-2 text-purple tabular-nums font-bold">{formatMetric(c.totalLtv, "currency")}</td>
+                                  <td className="text-right px-3 py-2 text-text-secondary tabular-nums">{c.cac > 0 ? formatMetric(c.cac, "currency") : "—"}</td>
+                                  <td className="text-right px-3 py-2 tabular-nums font-bold" style={{ color: ltvCacColor(c.ltvCac) }}>
+                                    {c.ltvCac > 0 ? c.ltvCac.toFixed(1) + "x" : "—"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </>
-        ) : !loading ? (
-          <p className="text-text-muted text-center py-12">Nenhum dado de retencao disponivel</p>
-        ) : null}
+        )}
       </div>
     </div>
   );
