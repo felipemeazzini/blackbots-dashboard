@@ -1,5 +1,6 @@
 export interface CampaignStripeData {
   utmCampaign: string;
+  metaCampaignId?: string;
   sales: number;
   revenue: number;
 }
@@ -8,12 +9,16 @@ export interface StripeMetrics {
   totalSales: number;
   totalRevenue: number;
   byCampaignName: CampaignStripeData[];
+  byCampaignId: CampaignStripeData[];
 }
 
 // Retention: raw subscription data from API
 export interface StripeSubscriptionData {
   subscriptionId: string;
   utmCampaign: string;
+  metaCampaignId?: string;
+  metaAdsetId?: string;
+  metaAdId?: string;
   totalPaid: number;
   firstPaid: number;
   lastPaid: number;

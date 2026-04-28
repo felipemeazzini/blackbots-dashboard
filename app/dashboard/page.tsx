@@ -197,14 +197,12 @@ export default function DashboardPage() {
   const { data: stripeResponse } = useStripeData(dateQueryString, autoRefreshInterval);
   const stripeData = stripeResponse?.data;
 
-  // Match Stripe campaigns to Facebook campaigns by name
+  // Match Stripe campaigns to Facebook campaigns: ID first (precise), exact name as fallback
   const campaignRowsWithStripe = useMemo(() => {
     if (!stripeData || !campaignRows.length) return campaignRows;
     return campaignRows.map((row) => {
-      const stripeMatch = stripeData.byCampaignName.find((s) =>
-        row.name.includes(s.utmCampaign) || s.utmCampaign.includes(row.name) ||
-        row.name.startsWith(s.utmCampaign.substring(0, 30))
-      );
+      const byId = stripeData.byCampaignId.find((s) => s.metaCampaignId === row.id);
+      const stripeMatch = byId || stripeData.byCampaignName.find((s) => s.utmCampaign === row.name);
       return {
         ...row,
         stripeData: stripeMatch ? { sales: stripeMatch.sales, revenue: stripeMatch.revenue } : undefined,

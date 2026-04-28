@@ -32,33 +32,54 @@ export async function getStripeSubscriptions(
     }
   }
 
-  const byCampaign = new Map<string, { sales: number; revenue: number }>();
+  const byCampaignNameMap = new Map<string, { sales: number; revenue: number; metaCampaignId?: string }>();
+  const byCampaignIdMap = new Map<string, { sales: number; revenue: number; utmCampaign: string }>();
   let totalSales = 0;
   let totalRevenue = 0;
 
   for (const sub of allSubs) {
-    const utmCampaign = sub.metadata?.utm_campaign || "Direto / Organico";
+    const utmCampaign = sub.metadata?.utm_campaign?.trim() || "Direto / Organico";
+    const metaCampaignIdRaw = sub.metadata?.meta_campaign_id?.trim();
+    const metaCampaignId = metaCampaignIdRaw && metaCampaignIdRaw.length > 0 ? metaCampaignIdRaw : undefined;
     const amount = sub.items.data[0]?.plan?.amount || sub.items.data[0]?.price?.unit_amount || 0;
     const revenue = (typeof amount === "number" ? amount : 0) / 100;
 
     totalSales++;
     totalRevenue += revenue;
 
-    const existing = byCampaign.get(utmCampaign) || { sales: 0, revenue: 0 };
-    existing.sales++;
-    existing.revenue += revenue;
-    byCampaign.set(utmCampaign, existing);
+    const nameEntry = byCampaignNameMap.get(utmCampaign) || { sales: 0, revenue: 0, metaCampaignId };
+    nameEntry.sales++;
+    nameEntry.revenue += revenue;
+    if (!nameEntry.metaCampaignId && metaCampaignId) nameEntry.metaCampaignId = metaCampaignId;
+    byCampaignNameMap.set(utmCampaign, nameEntry);
+
+    if (metaCampaignId) {
+      const idEntry = byCampaignIdMap.get(metaCampaignId) || { sales: 0, revenue: 0, utmCampaign };
+      idEntry.sales++;
+      idEntry.revenue += revenue;
+      byCampaignIdMap.set(metaCampaignId, idEntry);
+    }
   }
 
-  const byCampaignName = Array.from(byCampaign.entries())
+  const byCampaignName = Array.from(byCampaignNameMap.entries())
     .map(([utmCampaign, data]) => ({
       utmCampaign,
+      metaCampaignId: data.metaCampaignId,
       sales: data.sales,
       revenue: data.revenue,
     }))
     .sort((a, b) => b.sales - a.sales);
 
-  return { totalSales, totalRevenue, byCampaignName };
+  const byCampaignId = Array.from(byCampaignIdMap.entries())
+    .map(([metaCampaignId, data]) => ({
+      utmCampaign: data.utmCampaign,
+      metaCampaignId,
+      sales: data.sales,
+      revenue: data.revenue,
+    }))
+    .sort((a, b) => b.sales - a.sales);
+
+  return { totalSales, totalRevenue, byCampaignName, byCampaignId };
 }
 
 // Retention / LTV data

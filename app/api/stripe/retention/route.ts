@@ -9,6 +9,18 @@ const supabase = createClient(
 
 const SYNC_COOLDOWN = 5 * 60 * 1000;
 
+interface SubMeta {
+  utm: string;
+  campaignId?: string;
+  adsetId?: string;
+  adId?: string;
+}
+
+function nonEmpty(v: unknown): string | undefined {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s.length > 0 ? s : undefined;
+}
+
 async function stripeGet(path: string, params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`https://api.stripe.com/v1/${path}?${qs}`, {
@@ -18,15 +30,21 @@ async function stripeGet(path: string, params: Record<string, string> = {}) {
   return res.json();
 }
 
-async function buildSubUtmMap(): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
+async function buildSubMetaMap(): Promise<Map<string, SubMeta>> {
+  const map = new Map<string, SubMeta>();
   let cursor: string | undefined;
   for (let p = 0; p < 50; p++) {
     const params: Record<string, string> = { limit: "100", status: "all" };
     if (cursor) params.starting_after = cursor;
     const result = await stripeGet("subscriptions", params);
     for (const sub of result.data || []) {
-      map.set(sub.id, sub.metadata?.utm_campaign || "Direto / Organico");
+      const meta = sub.metadata || {};
+      map.set(sub.id, {
+        utm: nonEmpty(meta.utm_campaign) || "Direto / Organico",
+        campaignId: nonEmpty(meta.meta_campaign_id),
+        adsetId: nonEmpty(meta.meta_adset_id),
+        adId: nonEmpty(meta.meta_ad_id),
+      });
     }
     if (!result.has_more) break;
     cursor = result.data[result.data.length - 1]?.id;
@@ -46,7 +64,7 @@ async function syncInvoices(isFirstSync: boolean) {
 
   if (Date.now() - lastUpdate < SYNC_COOLDOWN && lastTs > 0) return;
 
-  const utmMap = await buildSubUtmMap();
+  const metaMap = await buildSubMetaMap();
 
   let cursor: string | undefined;
   let maxTs = lastTs;
@@ -62,6 +80,7 @@ async function syncInvoices(isFirstSync: boolean) {
 
     const rows = result.data.map((inv: Record<string, unknown>) => {
       const subId = (inv.subscription as string) || "";
+      const meta = metaMap.get(subId);
       return {
         id: inv.id as string,
         subscription_id: subId,
@@ -69,7 +88,10 @@ async function syncInvoices(isFirstSync: boolean) {
         amount_paid: (inv.amount_paid as number) || 0,
         currency: (inv.currency as string) || "brl",
         paid_at: new Date((inv.created as number) * 1000).toISOString(),
-        utm_campaign: utmMap.get(subId) || "Direto / Organico",
+        utm_campaign: meta?.utm || "Direto / Organico",
+        meta_campaign_id: meta?.campaignId ?? null,
+        meta_adset_id: meta?.adsetId ?? null,
+        meta_ad_id: meta?.adId ?? null,
       };
     });
 
@@ -95,7 +117,7 @@ async function syncInvoices(isFirstSync: boolean) {
 async function getSubscriptionData() {
   const { data: invoices } = await supabase
     .from("stripe_invoices_cache")
-    .select("subscription_id, amount_paid, utm_campaign, paid_at");
+    .select("subscription_id, amount_paid, utm_campaign, meta_campaign_id, meta_adset_id, meta_ad_id, paid_at");
 
   if (!invoices || invoices.length === 0) return [];
 
@@ -103,6 +125,9 @@ async function getSubscriptionData() {
   const bySub = new Map<string, {
     subscriptionId: string;
     utmCampaign: string;
+    metaCampaignId?: string;
+    metaAdsetId?: string;
+    metaAdId?: string;
     totalPaid: number;
     firstPaid: number;
     lastPaid: number;
@@ -115,11 +140,18 @@ async function getSubscriptionData() {
     const existing = bySub.get(subId) || {
       subscriptionId: subId,
       utmCampaign: inv.utm_campaign || "Direto / Organico",
+      metaCampaignId: nonEmpty(inv.meta_campaign_id),
+      metaAdsetId: nonEmpty(inv.meta_adset_id),
+      metaAdId: nonEmpty(inv.meta_ad_id),
       totalPaid: 0,
       firstPaid: paidTs,
       lastPaid: paidTs,
       invoiceCount: 0,
     };
+    // Preserve first non-empty ID encountered across invoices of the same sub
+    if (!existing.metaCampaignId) existing.metaCampaignId = nonEmpty(inv.meta_campaign_id);
+    if (!existing.metaAdsetId) existing.metaAdsetId = nonEmpty(inv.meta_adset_id);
+    if (!existing.metaAdId) existing.metaAdId = nonEmpty(inv.meta_ad_id);
     existing.totalPaid += inv.amount_paid / 100;
     if (paidTs < existing.firstPaid) existing.firstPaid = paidTs;
     if (paidTs > existing.lastPaid) existing.lastPaid = paidTs;
@@ -130,6 +162,9 @@ async function getSubscriptionData() {
   return Array.from(bySub.values()).map((sub) => ({
     subscriptionId: sub.subscriptionId,
     utmCampaign: sub.utmCampaign,
+    metaCampaignId: sub.metaCampaignId,
+    metaAdsetId: sub.metaAdsetId,
+    metaAdId: sub.metaAdId,
     totalPaid: sub.totalPaid,
     firstPaid: sub.firstPaid,
     lastPaid: sub.lastPaid,

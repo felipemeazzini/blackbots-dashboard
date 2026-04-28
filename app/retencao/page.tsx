@@ -50,41 +50,57 @@ export default function RetencaoPage() {
 
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
 
-  // Build campaign name -> account mapping from CAMPAIGNS API (exact match with Stripe utm)
-  const campaignAccountMap = useMemo(() => {
-    const map = new Map<string, { accountId: string; accountName: string }>();
+  // Build campaign mappings from CAMPAIGNS API
+  // Primary: by ID (exact). Fallback: by name (exact), for subs without meta_campaign_id.
+  const { campaignByIdMap, campaignByNameMap } = useMemo(() => {
+    const byId = new Map<string, { accountId: string; accountName: string; name: string }>();
+    const byName = new Map<string, { accountId: string; accountName: string; name: string }>();
     for (let i = 0; i < accounts.length; i++) {
       const camps = i === 0 ? campaigns0?.data : campaigns1?.data;
       if (!camps) continue;
       for (const camp of camps) {
-        map.set(camp.name, { accountId: accounts[i].id, accountName: accounts[i].name });
+        const entry = { accountId: accounts[i].id, accountName: accounts[i].name, name: camp.name };
+        byId.set(String(camp.id), entry);
+        byName.set(camp.name, entry);
       }
     }
-    return map;
+    return { campaignByIdMap: byId, campaignByNameMap: byName };
   }, [accounts, campaigns0, campaigns1]);
 
-  // Build spend maps
-  function buildSpendMap(datasets: Array<{ data?: unknown[] } | null>): Map<string, number> {
-    const map = new Map<string, number>();
+  // Build spend maps (both by ID and by name, for fallback)
+  function buildSpendMaps(datasets: Array<{ data?: unknown[] } | null>) {
+    const byId = new Map<string, number>();
+    const byName = new Map<string, number>();
     for (const ds of datasets) {
       if (!ds?.data) continue;
-      const byCamp = new Map<string, InsightRow[]>();
+      const rowsById = new Map<string, InsightRow[]>();
+      const rowsByName = new Map<string, InsightRow[]>();
       for (const row of ds.data as InsightRow[]) {
+        const id = String(row.campaign_id || "");
         const name = String(row.campaign_name || "");
-        if (!name) continue;
-        if (!byCamp.has(name)) byCamp.set(name, []);
-        byCamp.get(name)!.push(row);
+        if (id) {
+          if (!rowsById.has(id)) rowsById.set(id, []);
+          rowsById.get(id)!.push(row);
+        }
+        if (name) {
+          if (!rowsByName.has(name)) rowsByName.set(name, []);
+          rowsByName.get(name)!.push(row);
+        }
       }
-      for (const [name, rows] of byCamp) {
+      for (const [id, rows] of rowsById) {
         const m = aggregateMetrics(rows);
-        map.set(name, (map.get(name) || 0) + m.spend);
+        byId.set(id, (byId.get(id) || 0) + m.spend);
+      }
+      for (const [name, rows] of rowsByName) {
+        const m = aggregateMetrics(rows);
+        byName.set(name, (byName.get(name) || 0) + m.spend);
       }
     }
-    return map;
+    return { byId, byName };
   }
 
-  const fbSpendLifetime = useMemo(() => buildSpendMap([fbAll0, fbAll1]), [fbAll0, fbAll1]);
-  const fbSpendPeriod = useMemo(() => buildSpendMap([fbPeriod0, fbPeriod1]), [fbPeriod0, fbPeriod1]);
+  const fbSpendLifetime = useMemo(() => buildSpendMaps([fbAll0, fbAll1]), [fbAll0, fbAll1]);
+  const fbSpendPeriod = useMemo(() => buildSpendMaps([fbPeriod0, fbPeriod1]), [fbPeriod0, fbPeriod1]);
 
   // Period dates
   const periodStart = dateRange.customSince ? new Date(dateRange.customSince).getTime() : 0;
@@ -97,29 +113,20 @@ export default function RetencaoPage() {
     return subscriptions.filter((s) => s.firstPaid >= periodStart && s.firstPaid <= periodEnd);
   }, [subscriptions, periodStart, periodEnd, isAllTime]);
 
-  // Match utm_campaign to account — exact first, then fuzzy
-  function matchAccount(utmCampaign: string): { accountId: string; accountName: string } | null {
-    // Exact match
-    const exact = campaignAccountMap.get(utmCampaign);
-    if (exact) return exact;
-    // Fuzzy match
-    for (const [name, acc] of campaignAccountMap) {
-      if (name.includes(utmCampaign) || utmCampaign.includes(name) ||
-          (utmCampaign.length > 20 && name.startsWith(utmCampaign.substring(0, 20)))) {
-        return acc;
-      }
+  // Match subscription to account — ID first, then exact name fallback
+  function matchAccount(sub: StripeSubscriptionData): { accountId: string; accountName: string; name: string } | null {
+    if (sub.metaCampaignId) {
+      const byId = campaignByIdMap.get(sub.metaCampaignId);
+      if (byId) return byId;
     }
-    return null;
+    return campaignByNameMap.get(sub.utmCampaign) || null;
   }
 
-  function matchSpend(utmCampaign: string, spendMap: Map<string, number>): number {
-    let total = 0;
-    for (const [name, spend] of spendMap) {
-      if (name.includes(utmCampaign) || utmCampaign.includes(name) || name.startsWith(utmCampaign.substring(0, 30))) {
-        total += spend;
-      }
+  function matchSpend(sub: StripeSubscriptionData, maps: { byId: Map<string, number>; byName: Map<string, number> }): number {
+    if (sub.metaCampaignId) {
+      return maps.byId.get(sub.metaCampaignId) || 0;
     }
-    return total;
+    return maps.byName.get(sub.utmCampaign) || 0;
   }
 
   // Separate organic vs paid
@@ -130,7 +137,7 @@ export default function RetencaoPage() {
   const byAccount = useMemo(() => {
     const map = new Map<string, { accountName: string; subs: StripeSubscriptionData[] }>();
     for (const sub of paidSubs) {
-      const acc = matchAccount(sub.utmCampaign);
+      const acc = matchAccount(sub);
       const key = acc?.accountId || "unknown";
       const name = acc?.accountName || "Outras Campanhas";
       if (!map.has(key)) map.set(key, { accountName: name, subs: [] });
@@ -142,21 +149,28 @@ export default function RetencaoPage() {
       subs: data.subs,
       metrics: aggregateSubs(data.subs),
     })).sort((a, b) => b.metrics.totalLtv - a.metrics.totalLtv);
-  }, [paidSubs, campaignAccountMap]);
+  }, [paidSubs, campaignByIdMap, campaignByNameMap]);
 
-  // Group by campaign within an account
+  // Group by campaign within an account (by ID when available, else by name)
   function getCampaignRows(subs: StripeSubscriptionData[]) {
     const byCamp = new Map<string, StripeSubscriptionData[]>();
     for (const sub of subs) {
-      if (!byCamp.has(sub.utmCampaign)) byCamp.set(sub.utmCampaign, []);
-      byCamp.get(sub.utmCampaign)!.push(sub);
+      const key = sub.metaCampaignId ? `id:${sub.metaCampaignId}` : `name:${sub.utmCampaign}`;
+      if (!byCamp.has(key)) byCamp.set(key, []);
+      byCamp.get(key)!.push(sub);
     }
-    return Array.from(byCamp.entries()).map(([utmCampaign, campSubs]) => {
+    return Array.from(byCamp.entries()).map(([key, campSubs]) => {
+      const sample = campSubs[0];
+      // Prefer FB campaign name from the campaigns map if we have an ID; fallback to utmCampaign string
+      const displayName = sample.metaCampaignId
+        ? (campaignByIdMap.get(sample.metaCampaignId)?.name || sample.utmCampaign)
+        : sample.utmCampaign;
       const m = aggregateSubs(campSubs);
-      const spend = isAllTime ? matchSpend(utmCampaign, fbSpendLifetime) : matchSpend(utmCampaign, fbSpendPeriod);
+      const maps = isAllTime ? fbSpendLifetime : fbSpendPeriod;
+      const spend = matchSpend(sample, maps);
       const cac = m.total > 0 ? spend / m.total : 0;
       const ltvCac = cac > 0 ? m.avgLtv / cac : 0;
-      return { utmCampaign, ...m, spend, cac, ltvCac };
+      return { key, utmCampaign: displayName, ...m, spend, cac, ltvCac };
     }).sort((a, b) => b.totalLtv - a.totalLtv);
   }
 
@@ -165,9 +179,15 @@ export default function RetencaoPage() {
   const organicMetrics = aggregateSubs(organicSubs);
   const paidMetrics = aggregateSubs(paidSubs);
 
-  const totalSpend = isAllTime
-    ? Array.from(fbSpendLifetime.values()).reduce((s, v) => s + v, 0)
-    : Array.from(fbSpendPeriod.values()).reduce((s, v) => s + v, 0);
+  // Total account spend. Facebook campaign-level insights always carry campaign_id, so byId is authoritative;
+  // byName is only populated when the row somehow lacked an id.
+  function sumSpendMaps(maps: { byId: Map<string, number>; byName: Map<string, number> }): number {
+    const source = maps.byId.size > 0 ? maps.byId : maps.byName;
+    let total = 0;
+    for (const v of source.values()) total += v;
+    return total;
+  }
+  const totalSpend = isAllTime ? sumSpendMaps(fbSpendLifetime) : sumSpendMaps(fbSpendPeriod);
   const paidCac = paidMetrics.total > 0 ? totalSpend / paidMetrics.total : 0;
   const paidLtvCac = paidCac > 0 ? paidMetrics.avgLtv / paidCac : 0;
 
@@ -302,9 +322,16 @@ export default function RetencaoPage() {
               <div className="space-y-3">
                 {byAccount.map((acc) => {
                   const isExpanded = expandedAccount === acc.accountId;
-                  const accSpend = isAllTime
-                    ? acc.subs.reduce((s, sub) => s + matchSpend(sub.utmCampaign, fbSpendLifetime), 0)
-                    : acc.subs.reduce((s, sub) => s + matchSpend(sub.utmCampaign, fbSpendPeriod), 0);
+                  // Sum spend per unique campaign once (avoid double-counting when multiple subs share the same campaign)
+                  const seenCampaigns = new Set<string>();
+                  let accSpend = 0;
+                  const maps = isAllTime ? fbSpendLifetime : fbSpendPeriod;
+                  for (const sub of acc.subs) {
+                    const key = sub.metaCampaignId ? `id:${sub.metaCampaignId}` : `name:${sub.utmCampaign}`;
+                    if (seenCampaigns.has(key)) continue;
+                    seenCampaigns.add(key);
+                    accSpend += matchSpend(sub, maps);
+                  }
                   const accCac = acc.metrics.total > 0 ? accSpend / acc.metrics.total : 0;
                   const accLtvCac = accCac > 0 ? acc.metrics.avgLtv / accCac : 0;
 
@@ -351,7 +378,7 @@ export default function RetencaoPage() {
                             </thead>
                             <tbody>
                               {getCampaignRows(acc.subs).map((c) => (
-                                <tr key={c.utmCampaign} className="border-b border-border/30 hover:bg-bg-hover">
+                                <tr key={c.key} className="border-b border-border/30 hover:bg-bg-hover">
                                   <td className="px-4 py-2 text-text-primary">
                                     <span className="truncate max-w-[200px] block" title={c.utmCampaign}>{c.utmCampaign}</span>
                                   </td>
