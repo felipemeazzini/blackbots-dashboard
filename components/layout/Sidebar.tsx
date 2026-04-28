@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
-import { LayoutDashboard, Megaphone, Target, Globe, Trophy, ArrowLeftRight, HeartPulse, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, Megaphone, Target, Globe, Trophy, ArrowLeftRight, HeartPulse, Users, LogOut, Send } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/geral", label: "Visao Geral", icon: Globe },
@@ -87,6 +87,17 @@ export default function Sidebar() {
             >
               <Users size={18} />
               Usuarios
+            </Link>
+            <Link
+              href="/admin/listas"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                pathname === "/admin/listas" || pathname?.startsWith("/admin/listas/")
+                  ? "bg-accent/15 text-accent"
+                  : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+              }`}
+            >
+              <Send size={18} />
+              Listas de Leads
             </Link>
           </>
         )}
