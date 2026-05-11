@@ -347,10 +347,12 @@ export default function ListasPage() {
   const downloadXlsx = async (id: string, channel: "whatsapp" | "email", name: string) => {
     const res = await fetch(`/api/admin/leads/lists/${id}/export?channel=${channel}`, { headers: authHeaders });
     if (!res.ok) { setError("Erro ao baixar"); return; }
+    const contentType = res.headers.get("content-type") || "";
+    const ext = contentType.includes("zip") ? "zip" : "xlsx";
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${name}-${channel}.xlsx`;
+    a.href = url; a.download = `${name}-${channel}.${ext}`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   };

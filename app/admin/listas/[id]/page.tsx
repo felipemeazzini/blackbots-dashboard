@@ -115,11 +115,13 @@ export default function ListaDetalhePage({ params }: { params: Promise<{ id: str
       setError("Erro ao baixar planilha");
       return;
     }
+    const contentType = res.headers.get("content-type") || "";
+    const ext = contentType.includes("zip") ? "zip" : "xlsx";
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${list.name}-${channel}.xlsx`;
+    a.download = `${list.name}-${channel}.${ext}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
