@@ -53,13 +53,15 @@ export async function POST(req: NextRequest) {
 
   const userEmail = getUserEmail(req)!;
   const body = await req.json().catch(() => ({}));
-  const { name, description, preset_key, params, tier_filter, schedule_days } = body as {
+  const { name, description, preset_key, params, tier_filter, schedule_days, since, until } = body as {
     name?: string;
     description?: string;
     preset_key?: string;
     params?: Record<string, unknown>;
     tier_filter?: Tier[];
     schedule_days?: number;
+    since?: string | null;
+    until?: string | null;
   };
 
   if (!name || name.trim().length === 0) {
@@ -77,13 +79,17 @@ export async function POST(req: NextRequest) {
     ? tier_filter.filter((t): t is Tier => ALL_TIERS.includes(t))
     : ALL_TIERS;
 
+  const mergedParams: Record<string, unknown> = { ...(params || {}) };
+  if (since) mergedParams._since = since;
+  if (until) mergedParams._until = until;
+
   const { data, error } = await supabase
     .from("lead_list_templates")
     .insert({
       name: name.trim(),
       description: description?.trim() || null,
       preset_key,
-      preset_params: params || {},
+      preset_params: mergedParams,
       tier_filter: tiers,
       schedule_days: days,
       created_by_email: userEmail,

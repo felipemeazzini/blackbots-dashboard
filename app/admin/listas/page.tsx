@@ -63,6 +63,14 @@ interface PreviewSample {
   tier: Tier;
   months_active: number;
   score: number;
+  signup_at: string | null;
+}
+
+function formatDateBR(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR");
 }
 
 interface PreviewData {
@@ -112,6 +120,8 @@ export default function ListasPage() {
   const [listName, setListName] = useState("");
   const [listDescription, setListDescription] = useState("");
   const [scheduleDays, setScheduleDays] = useState("30");
+  const [sinceDate, setSinceDate] = useState("");
+  const [untilDate, setUntilDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [runningTplId, setRunningTplId] = useState<string | null>(null);
 
@@ -187,6 +197,8 @@ export default function ListasPage() {
     setListName("");
     setListDescription("");
     setScheduleDays("30");
+    setSinceDate("");
+    setUntilDate("");
   };
 
   const startPresetWithParams = (presetKey: string, params: Record<string, unknown>) => {
@@ -221,7 +233,7 @@ export default function ListasPage() {
       const res = await fetch("/api/admin/leads/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ preset_key: currentPreset.key, params: buildParams(), tier_filter: Array.from(tierFilter) }),
+        body: JSON.stringify({ preset_key: currentPreset.key, params: buildParams(), tier_filter: Array.from(tierFilter), since: sinceDate || null, until: untilDate || null }),
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error || "Erro no preview"); return; }
@@ -249,6 +261,8 @@ export default function ListasPage() {
           preset_key: currentPreset.key,
           params: buildParams(),
           tier_filter: Array.from(tierFilter),
+          since: sinceDate || null,
+          until: untilDate || null,
         }),
       });
       const json = await res.json();
@@ -285,6 +299,8 @@ export default function ListasPage() {
           params: buildParams(),
           tier_filter: Array.from(tierFilter),
           schedule_days: days,
+          since: sinceDate || null,
+          until: untilDate || null,
         }),
       });
       const json = await res.json();
@@ -556,6 +572,29 @@ export default function ListasPage() {
                     })}
                   </div>
                   <p className="text-[10px] text-text-muted mt-1">VIP = ativo OU 12+ meses pagos · Engaged = 3-11 meses · Casual = 1-2 meses · Cold = nunca pagou</p>
+                </div>
+              )}
+
+              {currentPreset && (
+                <div>
+                  <label className="block text-xs text-text-muted mb-1.5 uppercase tracking-wider">Periodo de cadastro (opcional)</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="date"
+                      value={sinceDate}
+                      onChange={(e) => { setSinceDate(e.target.value); setPreview(null); }}
+                      placeholder="De"
+                      className="w-full bg-bg-hover border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                    />
+                    <input
+                      type="date"
+                      value={untilDate}
+                      onChange={(e) => { setUntilDate(e.target.value); setPreview(null); }}
+                      placeholder="Ate"
+                      className="w-full bg-bg-hover border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                    />
+                  </div>
+                  <p className="text-[10px] text-text-muted mt-1">Filtra leads pela data de cadastro original. Deixar vazio = sem filtro.</p>
                 </div>
               )}
 

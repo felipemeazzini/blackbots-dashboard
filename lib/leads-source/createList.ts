@@ -18,6 +18,8 @@ export interface CreateListArgs {
   preset_key: string;
   params: Record<string, unknown>;
   tier_filter?: Tier[];
+  since?: string | null;
+  until?: string | null;
   created_by_email: string;
 }
 
@@ -42,7 +44,7 @@ export class CreateListError extends Error {
 }
 
 export async function createLeadList(args: CreateListArgs): Promise<CreateListResult> {
-  const { name, description, preset_key, params, created_by_email } = args;
+  const { name, description, preset_key, params, since, until, created_by_email } = args;
 
   if (!name || name.trim().length === 0) throw new CreateListError("name obrigatorio");
   if (!preset_key || !getPreset(preset_key)) throw new CreateListError("preset_key invalido");
@@ -55,7 +57,7 @@ export async function createLeadList(args: CreateListArgs): Promise<CreateListRe
   const raw = await runPresetQuery(preset_key, params || {});
 
   const seen = new Set<string>();
-  const normalized: { name: string | null; email: string | null; phone: string | null; source_id: string; user_id?: string | null }[] = [];
+  const normalized: { name: string | null; email: string | null; phone: string | null; source_id: string; user_id?: string | null; signup_at?: string | null }[] = [];
   for (const r of raw) {
     const email = normalizeEmail(r.email);
     const phone = normalizePhoneBR(r.phone);
@@ -63,14 +65,33 @@ export async function createLeadList(args: CreateListArgs): Promise<CreateListRe
     const dedupKey = `${email || ""}|${phone || ""}`;
     if (seen.has(dedupKey)) continue;
     seen.add(dedupKey);
-    normalized.push({ name: r.name?.trim() || null, email, phone, source_id: r.source_id, user_id: r.user_id ?? null });
+    normalized.push({
+      name: r.name?.trim() || null,
+      email,
+      phone,
+      source_id: r.source_id,
+      user_id: r.user_id ?? null,
+      signup_at: r.signup_at ?? null,
+    });
   }
 
   if (normalized.length > MAX_LEADS_PER_LIST) {
     throw new CreateListError(`Resultado excede ${MAX_LEADS_PER_LIST} leads (${normalized.length}). Refine o preset.`);
   }
 
-  const enriched = await enrichLeads(normalized);
+  let enriched = await enrichLeads(normalized);
+
+  // Filtro de periodo (signup_at)
+  if (since || until) {
+    const sinceTs = since ? new Date(since).getTime() : -Infinity;
+    const untilTs = until ? new Date(until + "T23:59:59").getTime() : Infinity;
+    enriched = enriched.filter((l) => {
+      if (!l.signup_at) return false;
+      const ts = new Date(l.signup_at).getTime();
+      return ts >= sinceTs && ts <= untilTs;
+    });
+  }
+
   const filtered = enriched.filter((l) => tierSet.has(l.tier));
 
   if (filtered.length === 0) {
@@ -123,6 +144,7 @@ export async function createLeadList(args: CreateListArgs): Promise<CreateListRe
       email: l.email,
       phone: l.phone,
       source_id: l.source_id,
+      signup_at: l.signup_at ?? null,
       score: l.score,
       tier: l.tier,
       months_active: l.months_active,

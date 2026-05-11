@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isAdmin } from "@/lib/admin-auth";
+import { lookupCrossLists } from "@/lib/leads-source/crossLists";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,14 +31,21 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const { data: leads, error: leadsErr } = await supabase
     .from("leads")
-    .select("id, name, email, phone, source_id, created_at, score, tier, months_active, total_paid_brl, last_paid_at, currently_active")
+    .select("id, name, email, phone, source_id, created_at, score, tier, months_active, total_paid_brl, last_paid_at, currently_active, signup_at")
     .eq("list_id", id)
     .order("score", { ascending: false })
     .range(from, to);
 
   if (leadsErr) return NextResponse.json({ error: leadsErr.message }, { status: 500 });
 
-  return NextResponse.json({ data: { list, leads: leads || [], page, pageSize } });
+  // Cross-list lookup: pra cada lead da pagina, quais outras listas tem o mesmo email/phone
+  const crossMap = await lookupCrossLists(id, (leads || []).map((l) => ({ id: l.id, email: l.email, phone: l.phone })));
+  const enrichedLeads = (leads || []).map((l) => ({
+    ...l,
+    appeared_in_lists: crossMap.get(l.id) || [],
+  }));
+
+  return NextResponse.json({ data: { list, leads: enrichedLeads, page, pageSize } });
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

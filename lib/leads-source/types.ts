@@ -4,6 +4,7 @@ export interface RawLead {
   email: string | null;
   phone: string | null;
   user_id?: string | null;
+  signup_at?: string | null;
 }
 
 export type Tier = "vip" | "engaged" | "casual" | "cold";

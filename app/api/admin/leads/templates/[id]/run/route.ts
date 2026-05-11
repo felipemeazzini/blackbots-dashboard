@@ -28,13 +28,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const listName = `${tpl.name} - ${monthSuffix()}`;
 
+  // Extrai filtros de periodo de dentro do preset_params (armazenados com prefixo _)
+  const allParams = (tpl.preset_params || {}) as Record<string, unknown>;
+  const since = typeof allParams._since === "string" ? allParams._since : null;
+  const until = typeof allParams._until === "string" ? allParams._until : null;
+  const cleanParams: Record<string, unknown> = { ...allParams };
+  delete cleanParams._since;
+  delete cleanParams._until;
+
   try {
     const result = await createLeadList({
       name: listName,
       description: tpl.description,
       preset_key: tpl.preset_key,
-      params: tpl.preset_params || {},
+      params: cleanParams,
       tier_filter: tpl.tier_filter,
+      since,
+      until,
       created_by_email: userEmail,
     });
 

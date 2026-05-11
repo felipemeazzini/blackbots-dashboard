@@ -52,6 +52,15 @@ interface Lead {
   total_paid_brl: number;
   last_paid_at: string | null;
   currently_active: boolean;
+  signup_at: string | null;
+  appeared_in_lists: string[];
+}
+
+function formatDateBR(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR");
 }
 
 export default function ListaDetalhePage({ params }: { params: Promise<{ id: string }> }) {
@@ -200,14 +209,17 @@ export default function ListaDetalhePage({ params }: { params: Promise<{ id: str
                       <th className="text-left px-4 py-2 font-medium">Nome</th>
                       <th className="text-left px-4 py-2 font-medium">Email</th>
                       <th className="text-left px-4 py-2 font-medium">Telefone</th>
+                      <th className="text-left px-4 py-2 font-medium">Cadastro</th>
                       <th className="text-right px-4 py-2 font-medium">Meses</th>
                       <th className="text-right px-4 py-2 font-medium">R$ pago</th>
                       <th className="text-right px-4 py-2 font-medium">Score</th>
+                      <th className="text-left px-4 py-2 font-medium">Em outras listas</th>
                     </tr>
                   </thead>
                   <tbody>
                     {leads.map((l) => {
                       const m = TIER_META[l.tier];
+                      const other = l.appeared_in_lists || [];
                       return (
                         <tr key={l.id} className="border-t border-border/30">
                           <td className="px-4 py-2">
@@ -218,9 +230,21 @@ export default function ListaDetalhePage({ params }: { params: Promise<{ id: str
                           <td className="px-4 py-2 text-text-primary truncate max-w-[180px]">{l.name || "—"}</td>
                           <td className="px-4 py-2 text-text-secondary truncate max-w-[220px]">{l.email || "—"}</td>
                           <td className="px-4 py-2 text-text-secondary tabular-nums">{l.phone || "—"}</td>
+                          <td className="px-4 py-2 text-text-secondary tabular-nums">{formatDateBR(l.signup_at)}</td>
                           <td className="px-4 py-2 text-right text-text-secondary tabular-nums">{l.months_active}</td>
                           <td className="px-4 py-2 text-right text-text-secondary tabular-nums">{l.total_paid_brl > 0 ? `R$ ${Number(l.total_paid_brl).toFixed(2)}` : "—"}</td>
                           <td className="px-4 py-2 text-right text-text-primary font-medium tabular-nums">{l.score}</td>
+                          <td className="px-4 py-2 text-text-secondary text-xs">
+                            {other.length === 0 ? (
+                              "—"
+                            ) : other.length === 1 ? (
+                              <span className="truncate max-w-[160px] inline-block align-bottom" title={other[0]}>{other[0]}</span>
+                            ) : (
+                              <span className="truncate max-w-[160px] inline-block align-bottom" title={other.join(" | ")}>
+                                {other[0]} <span className="text-text-muted">+{other.length - 1}</span>
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}

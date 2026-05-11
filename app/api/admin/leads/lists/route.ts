@@ -30,12 +30,14 @@ export async function POST(req: NextRequest) {
 
   const userEmail = getUserEmail(req)!;
   const body = await req.json().catch(() => ({}));
-  const { name, description, preset_key, params, tier_filter } = body as {
+  const { name, description, preset_key, params, tier_filter, since, until } = body as {
     name?: string;
     description?: string;
     preset_key?: string;
     params?: Record<string, unknown>;
     tier_filter?: Tier[];
+    since?: string | null;
+    until?: string | null;
   };
 
   try {
@@ -45,6 +47,8 @@ export async function POST(req: NextRequest) {
       preset_key: preset_key || "",
       params: params || {},
       tier_filter,
+      since,
+      until,
       created_by_email: userEmail,
     });
     return NextResponse.json({ data: result });

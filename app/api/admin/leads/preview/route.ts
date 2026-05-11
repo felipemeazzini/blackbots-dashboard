@@ -12,10 +12,12 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { preset_key, params, tier_filter } = body as {
+  const { preset_key, params, tier_filter, since, until } = body as {
     preset_key?: string;
     params?: Record<string, unknown>;
     tier_filter?: Tier[];
+    since?: string | null;
+    until?: string | null;
   };
 
   if (!preset_key || !getPreset(preset_key)) {
@@ -40,7 +42,18 @@ export async function POST(req: NextRequest) {
       }))
       .filter((r) => r.email || r.phone);
 
-    const enriched = await enrichLeads(normalized);
+    let enriched = await enrichLeads(normalized);
+
+    if (since || until) {
+      const sinceTs = since ? new Date(since).getTime() : -Infinity;
+      const untilTs = until ? new Date(until + "T23:59:59").getTime() : Infinity;
+      enriched = enriched.filter((l) => {
+        if (!l.signup_at) return false;
+        const ts = new Date(l.signup_at).getTime();
+        return ts >= sinceTs && ts <= untilTs;
+      });
+    }
+
     const filtered = enriched.filter((l) => tierSet.has(l.tier));
 
     let withEmail = 0;
@@ -65,6 +78,7 @@ export async function POST(req: NextRequest) {
         tier: l.tier,
         months_active: l.months_active,
         score: l.score,
+        signup_at: l.signup_at,
       }));
 
     return NextResponse.json({

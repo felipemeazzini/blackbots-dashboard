@@ -12,7 +12,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       JOIN prod."UserPurchase" p ON p."userId" = u.id
       WHERE p."isActive" = true
@@ -29,7 +30,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       JOIN prod."UserPurchase" p ON p."userId" = u.id
       WHERE NOT EXISTS (
@@ -54,7 +56,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       WHERE u."createdAt" >= NOW() - ($1::int || ' days')::interval
       ORDER BY u."createdAt" DESC
@@ -72,7 +75,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       WHERE NOT EXISTS (
         SELECT 1 FROM prod."UserPurchase" p WHERE p."userId" = u.id
@@ -92,7 +96,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (l.name || ' ' || COALESCE(l.surname, ''))) AS name,
         l.email,
-        l.whatsapp AS phone
+        l.whatsapp AS phone,
+        u."createdAt"::text AS signup_at
       FROM prod."Leads" l
       LEFT JOIN prod."User" u ON LOWER(u.email) = LOWER(l.email)
       ORDER BY l.id
@@ -108,7 +113,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       JOIN prod."AutoChartsContract" a ON a."userId" = u.id
       WHERE a."isActive" = true
@@ -125,7 +131,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       JOIN prod."AutoChartsContract" a ON a."userId" = u.id
       WHERE NOT EXISTS (
@@ -150,7 +157,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       WHERE EXISTS (
         SELECT 1 FROM prod."UserPurchase" p
@@ -184,7 +192,8 @@ const QUERIES: Record<string, QueryFn> = {
         u.id::text AS user_id,
         TRIM(BOTH ' ' FROM (u.name || ' ' || COALESCE(u."lastName", ''))) AS name,
         u.email,
-        u.phone
+        u.phone,
+        u."createdAt"::text AS signup_at
       FROM prod."User" u
       JOIN prod."UserPurchase" p ON p."userId" = u.id
       WHERE p."createdAt" >= NOW() - ($1::int || ' days')::interval
