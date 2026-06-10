@@ -18,8 +18,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow data API routes (each one enforces its own auth)
-  if (pathname.startsWith("/api/facebook") || pathname.startsWith("/api/stripe") || pathname.startsWith("/api/goals") || pathname.startsWith("/api/budgets") || pathname.startsWith("/api/user-access") || pathname.startsWith("/api/admin")) {
+  // Allow data API routes (each one enforces its own auth) and public cron route
+  if (pathname.startsWith("/api/facebook") || pathname.startsWith("/api/stripe") || pathname.startsWith("/api/goals") || pathname.startsWith("/api/budgets") || pathname.startsWith("/api/user-access") || pathname.startsWith("/api/admin") || pathname.startsWith("/api/keepalive")) {
     return NextResponse.next();
   }
 
