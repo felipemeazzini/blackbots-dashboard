@@ -108,7 +108,7 @@ export default function ListaDetalhePage({ params }: { params: Promise<{ id: str
     if (userEmail) loadList();
   }, [userEmail, loadList]);
 
-  const downloadXlsx = async (channel: "whatsapp" | "email") => {
+  const downloadXlsx = async (channel: "whatsapp" | "email" | "complete") => {
     if (!list) return;
     const res = await fetch(`/api/admin/leads/lists/${id}/export?channel=${channel}`, { headers: authHeaders });
     if (!res.ok) {
@@ -197,6 +197,13 @@ export default function ListaDetalhePage({ params }: { params: Promise<{ id: str
                   className="flex items-center gap-2 px-4 py-2 bg-purple/10 text-purple rounded-lg text-sm font-medium hover:bg-purple/20 disabled:opacity-30"
                 >
                   <Download size={14} /> Baixar Email ({list.total_with_email})
+                </button>
+                <button
+                  onClick={() => downloadXlsx("complete")}
+                  disabled={list.total_leads === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-bg-hover text-text-primary border border-border rounded-lg text-sm font-medium hover:border-accent/30 disabled:opacity-30"
+                >
+                  <Download size={14} /> Baixar tudo ({list.total_leads})
                 </button>
               </div>
             </section>

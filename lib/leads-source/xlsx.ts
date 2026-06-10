@@ -14,6 +14,9 @@ export interface SavedLead {
   score?: number | null;
   signup_at?: string | null;
   appeared_in_lists?: string[];
+  months_active?: number | null;
+  total_paid_brl?: number | null;
+  currently_active?: boolean | null;
 }
 
 function sortByScore(leads: SavedLead[]): SavedLead[] {
@@ -77,6 +80,23 @@ function sheetToBuffer(rows: Record<string, string>[], sheetName: string): Buffe
   const ws = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
+export function buildCompleteXlsx(leads: SavedLead[]): Buffer {
+  const sorted = sortByScore(leads);
+  const rows = sorted.map((l) => ({
+    nome: l.name ?? "",
+    email: l.email ?? "",
+    telefone: l.phone ?? "",
+    tier: l.tier ?? "cold",
+    score: l.score ?? 0,
+    meses_ativos: l.months_active ?? 0,
+    total_pago_brl: l.total_paid_brl ?? 0,
+    data_cadastro: formatDateBR(l.signup_at),
+    cliente_ativo: l.currently_active ? "sim" : "nao",
+    outras_listas: joinLists(l.appeared_in_lists),
+  }));
+  return sheetToBuffer(rows as unknown as Record<string, string>[], "leads");
 }
 
 export async function bundleXlsxToZip(filesByName: Record<string, Buffer>): Promise<Buffer> {

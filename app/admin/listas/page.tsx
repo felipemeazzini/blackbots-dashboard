@@ -344,7 +344,7 @@ export default function ListasPage() {
     if (res.ok) { setMessage(`Lista "${name}" removida`); await loadAll(); }
   };
 
-  const downloadXlsx = async (id: string, channel: "whatsapp" | "email", name: string) => {
+  const downloadXlsx = async (id: string, channel: "whatsapp" | "email" | "complete", name: string) => {
     const res = await fetch(`/api/admin/leads/lists/${id}/export?channel=${channel}`, { headers: authHeaders });
     if (!res.ok) { setError("Erro ao baixar"); return; }
     const contentType = res.headers.get("content-type") || "";
@@ -736,6 +736,9 @@ export default function ListasPage() {
                         </button>
                         <button onClick={() => downloadXlsx(l.id, "email", l.name)} disabled={l.total_with_email === 0} className="flex items-center gap-1 px-3 py-1.5 bg-purple/10 text-purple rounded-lg text-xs font-medium hover:bg-purple/20 disabled:opacity-30">
                           <Download size={12} /> Email
+                        </button>
+                        <button onClick={() => downloadXlsx(l.id, "complete", l.name)} disabled={l.total_leads === 0} className="flex items-center gap-1 px-3 py-1.5 bg-bg-hover text-text-primary border border-border rounded-lg text-xs font-medium hover:border-accent/30 disabled:opacity-30">
+                          <Download size={12} /> Tudo
                         </button>
                         <button onClick={() => deleteList(l.id, l.name)} className="flex items-center gap-1 px-3 py-1.5 bg-bg-hover text-text-muted rounded-lg text-xs hover:text-red ml-auto">
                           <Trash2 size={12} /> Apagar

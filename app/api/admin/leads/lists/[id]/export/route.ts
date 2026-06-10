@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isAdmin } from "@/lib/admin-auth";
 import {
+  buildCompleteXlsx,
   buildEmailXlsxChunks,
   buildWhatsappXlsxChunks,
   bundleXlsxToZip,
@@ -36,8 +37,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const { searchParams } = new URL(req.url);
   const channel = searchParams.get("channel");
-  if (channel !== "whatsapp" && channel !== "email") {
-    return NextResponse.json({ error: "channel deve ser 'whatsapp' ou 'email'" }, { status: 400 });
+  if (channel !== "whatsapp" && channel !== "email" && channel !== "complete") {
+    return NextResponse.json({ error: "channel deve ser 'whatsapp', 'email' ou 'complete'" }, { status: 400 });
   }
 
   const { data: list, error: listErr } = await supabase
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   for (;;) {
     const { data, error } = await supabase
       .from("leads")
-      .select("id, name, email, phone, tier, score, signup_at")
+      .select("id, name, email, phone, tier, score, signup_at, months_active, total_paid_brl, currently_active")
       .eq("list_id", id)
       .order("score", { ascending: false })
       .range(from, from + PAGE - 1);
@@ -76,6 +77,24 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     l.appeared_in_lists = crossMap.get(l.id) || [];
   }
 
+  const slug = slugify(list.name);
+
+  // "complete" = unico xlsx, sem chunking, com TODAS as colunas
+  if (channel === "complete") {
+    if (all.length === 0) {
+      return NextResponse.json({ error: "Lista vazia" }, { status: 400 });
+    }
+    const buf = buildCompleteXlsx(all);
+    return new NextResponse(new Uint8Array(buf), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${slug}-completo.xlsx"`,
+        "Content-Length": String(buf.length),
+      },
+    });
+  }
+
   const chunks =
     channel === "whatsapp"
       ? buildWhatsappXlsxChunks(all)
@@ -84,8 +103,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (chunks.length === 0) {
     return NextResponse.json({ error: `Nenhum lead com ${channel === "whatsapp" ? "telefone" : "email"}` }, { status: 400 });
   }
-
-  const slug = slugify(list.name);
 
   if (chunks.length === 1) {
     const buf = chunks[0];
