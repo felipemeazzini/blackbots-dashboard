@@ -344,6 +344,31 @@ export default function ListasPage() {
     if (res.ok) { setMessage(`Lista "${name}" removida`); await loadAll(); }
   };
 
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const downloadAll = async () => {
+    setDownloadingAll(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/leads/export-all", { headers: authHeaders });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error || "Erro ao baixar base completa");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "base-completa.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
   const downloadXlsx = async (id: string, channel: "whatsapp" | "email" | "complete", name: string) => {
     const res = await fetch(`/api/admin/leads/lists/${id}/export?channel=${channel}`, { headers: authHeaders });
     if (!res.ok) { setError("Erro ao baixar"); return; }
@@ -377,9 +402,20 @@ export default function ListasPage() {
   return (
     <div>
       <header className="sticky top-0 z-40 bg-bg-primary/80 backdrop-blur-sm border-b border-border px-6 py-4">
-        <div className="flex items-center gap-2">
-          <Send size={20} className="text-accent" />
-          <h2 className="text-lg font-semibold text-text-primary">Listas de Leads</h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Send size={20} className="text-accent" />
+            <h2 className="text-lg font-semibold text-text-primary">Listas de Leads</h2>
+          </div>
+          <button
+            onClick={downloadAll}
+            disabled={downloadingAll}
+            className="flex items-center gap-2 px-4 py-2 bg-accent/15 text-accent border border-accent/30 rounded-lg text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
+            title="Junta todos os leads de todas as listas, deduplica e baixa uma planilha unica"
+          >
+            {downloadingAll ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            Baixar base completa
+          </button>
         </div>
       </header>
 
